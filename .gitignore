@@ -221,3 +221,5 @@ __marimo__/
 .cache.sqlite
 # Application logs
 logs/
+# Local test output
+tests/output/
