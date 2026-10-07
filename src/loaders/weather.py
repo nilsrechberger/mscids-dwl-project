@@ -31,5 +31,6 @@ def fetch_weather(url: str) -> list[WeatherApiResponse]:
         }
         responses = openmeteo.weather_api(url, params=params)
     except Exception as e:
-            print(e)
+        logger.error("%s", e)
+        raise
     return responses

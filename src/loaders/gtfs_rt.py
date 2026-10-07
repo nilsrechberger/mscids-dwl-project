@@ -27,6 +27,7 @@ def fetch_gtfs_rt() -> dict:
         )
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
-        print(e)
+        logger.error("%s", e)
+        raise
 
     return response.json()
