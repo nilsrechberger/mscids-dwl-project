@@ -15,6 +15,7 @@ from src.loaders.gtfs_rt import fetch_gtfs_rt
 from src.loaders.municipality import fetch_municipality
 from src.loaders.transport import fetch_locations
 from src.loaders.weather import fetch_weather
+from src.log import setup_logging
 from src.storage import write_raw
 
 logger = logging.getLogger(__name__)
@@ -72,7 +73,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, str]:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    setup_logging()
     if len(sys.argv) != 2:
         sys.exit(f"Usage: python -m src.run <{'|'.join(sorted(LOADERS))}>")
     run(sys.argv[1])

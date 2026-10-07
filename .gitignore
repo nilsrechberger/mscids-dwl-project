@@ -219,3 +219,5 @@ __marimo__/
 
 # SQLite
 .cache.sqlite
+# Application logs
+logs/

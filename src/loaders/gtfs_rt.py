@@ -1,5 +1,9 @@
 """Fetch data from the GTFS-RT API"""
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 import requests
 
 from src.config import config
@@ -23,6 +27,6 @@ def fetch_gtfs_rt() -> dict:
         )
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
-            print(e)
+        print(e)
 
     return response.json()

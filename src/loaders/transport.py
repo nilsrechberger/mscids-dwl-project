@@ -1,5 +1,9 @@
 """Fetch Transport data from Swiss public transport API"""
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 import requests
 
 from src.config import config

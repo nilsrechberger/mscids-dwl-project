@@ -1,9 +1,12 @@
 """Fetch historical weather data from Open-Meteo"""
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 import openmeteo_requests
 
 from openmeteo_sdk.WeatherApiResponse import WeatherApiResponse
-import requests_cache
 from retry_requests import retry
 
 

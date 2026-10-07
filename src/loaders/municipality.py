@@ -1,5 +1,9 @@
 """Downloads the municipality file from BFS"""
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 import requests
 
 from src.config import config
