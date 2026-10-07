@@ -15,10 +15,14 @@ def fetch_gtfs_rt() -> dict:
     Returns:
         dict: Request response
     """
-    response = requests.get(
-        f"{config.GTFS_RT_API_ENDPOINT}?format=JSON",
-        headers={"Authorization": f"{config.GTFS_RT_API_TOKEN}"},
-        timeout=10,
-    )
-    response.raise_for_status()
+    try:
+        response = requests.get(
+            url=f"{config.GTFS_RT_API_ENDPOINT}?format=JSON",
+            headers={"Authorization": f"{config.GTFS_RT_API_TOKEN}"},
+            timeout=10,
+        )
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+            print(e)
+
     return response.json()

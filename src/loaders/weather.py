@@ -17,15 +17,16 @@ def fetch_weather(url: str) -> list[WeatherApiResponse]:
     Returns:
         list: Weather API Responses
     """
-    cache_session = requests_cache.CachedSession(".cache", expire_after=-1)
-    retry_session = retry(cache_session, retries=5, backoff_factor=0.2)
-    openmeteo = openmeteo_requests.Client(session=retry_session)
-    params = {
-        "latitude": 47.0002,
-        "longitude": 8.0143,
-        "start_date": "2026-09-14",
-        "end_date": "2026-09-28",
-        "hourly": "temperature_2m",
-    }
-    responses = openmeteo.weather_api(url, params=params)
+    try:
+        openmeteo = openmeteo_requests.Client()
+        params = {
+            "latitude": 47.0002,
+            "longitude": 8.0143,
+            "start_date": "2026-09-14",
+            "end_date": "2026-09-28",
+            "hourly": "temperature_2m",
+        }
+        responses = openmeteo.weather_api(url, params=params)
+    except Exception as e:
+            print(e)
     return responses

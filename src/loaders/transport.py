@@ -15,10 +15,13 @@ def fetch_locations(query: str = "Basel") -> dict:
     Returns:
         dict: API response
     """
-    response = requests.get(
-        f"{config.TRANSPORT_API_ENDPOINT}/locations",
-        params={"query": query},
-        timeout=10,
-    )
-    response.raise_for_status()
+    try:
+        response = requests.get(
+            f"{config.TRANSPORT_API_ENDPOINT}/locations",
+            params={"query": query},
+            timeout=10,
+        )
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+            print(e)
     return response.json()

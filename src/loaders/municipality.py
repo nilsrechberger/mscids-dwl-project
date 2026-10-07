@@ -15,9 +15,12 @@ def fetch_municipality() -> requests.Response:
     Returns:
         requests.Response: Response containing the XLSX file
     """
-    response = requests.post(
-        f"{config.MUNICIPALITY_XLSX}",
-        timeout=10,
-    )
-    response.raise_for_status()
+    try:
+        response = requests.post(
+            f"{config.MUNICIPALITY_XLSX}",
+            timeout=10,
+        )
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(e)
     return response
