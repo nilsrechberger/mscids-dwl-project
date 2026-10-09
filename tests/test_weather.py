@@ -1,44 +1,46 @@
 """Test file for weather.py"""
 
+import json
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-import pandas as pd
+import pytest
+import requests
 
-from src.config import config
 from src.loaders.weather import fetch_weather
 
 
-def test_fetch_location() -> None:
-    """Checks if gtfs_rf data is a dict"""
+def test_fetch_weather() -> None:
+    """Returns the JSON body and requests hourly temperature"""
+    response = MagicMock()
+    response.json.return_value = {"hourly": {"temperature_2m": [1.0]}}
+    with patch("src.loaders.weather.requests.get", return_value=response) as get, patch(
+        "src.loaders.weather.config.WEATHER_API_ENDPOINT", "http://api"
+    ):
+        result = fetch_weather()
 
-    assert config.WEATHER_API_ENDPOINT is not None
-
-    result = fetch_weather(url=config.WEATHER_API_ENDPOINT)
-
-    assert isinstance(result, list)
+    assert result == {"hourly": {"temperature_2m": [1.0]}}
+    assert get.call_args.args[0] == "http://api"
+    assert get.call_args.kwargs["params"]["hourly"] == "temperature_2m"
 
 
+def test_fetch_weather_error() -> None:
+    """Re-raises request errors"""
+    with patch(
+        "src.loaders.weather.requests.get",
+        side_effect=requests.exceptions.ConnectionError("boom"),
+    ):
+        with pytest.raises(requests.exceptions.ConnectionError):
+            fetch_weather()
+
+
+@pytest.mark.network
 def test_fetch_weather_dump(output_dir: Path) -> None:
-    """Saves the hourly weather data to tests/output/weather.csv for local inspection"""
+    """Saves the weather data to tests/output/weather.json for local inspection"""
 
-    assert config.WEATHER_API_ENDPOINT is not None
+    result = fetch_weather()
 
-    response = fetch_weather(url=config.WEATHER_API_ENDPOINT)[0]
-    hourly = response.Hourly()
+    output_file = output_dir / "weather.json"
+    output_file.write_text(json.dumps(result, indent=2), encoding="utf-8")
 
-    df = pd.DataFrame(
-        {
-            "date": pd.date_range(
-                start=pd.to_datetime(hourly.Time(), unit="s", utc=True),
-                end=pd.to_datetime(hourly.TimeEnd(), unit="s", utc=True),
-                freq=pd.Timedelta(seconds=hourly.Interval()),
-                inclusive="left",
-            ),
-            "temperature_2m": hourly.Variables(0).ValuesAsNumpy(),
-        }
-    )
-
-    output_file = output_dir / "weather.csv"
-    df.to_csv(output_file, index=False)
-
-    assert not df.empty
+    assert result["hourly"]["temperature_2m"]

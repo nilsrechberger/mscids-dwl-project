@@ -10,7 +10,6 @@ import sys
 from collections.abc import Callable
 from typing import Any
 
-from src.config import config
 from src.loaders.gtfs_rt import fetch_gtfs_rt
 from src.loaders.municipality import fetch_municipality
 from src.loaders.transport import fetch_locations
@@ -25,22 +24,9 @@ def _json_bytes(data: Any) -> bytes:
     return json.dumps(data).encode("utf-8")
 
 
-def _load_weather() -> tuple[bytes, str]:
-    assert config.WEATHER_API_ENDPOINT is not None
-    hourly = fetch_weather(config.WEATHER_API_ENDPOINT)[0].Hourly()
-    assert hourly is not None
-    start, end, step = hourly.Time(), hourly.TimeEnd(), hourly.Interval()
-    values = hourly.Variables(0).ValuesAsNumpy().tolist()
-    records = [
-        {"timestamp": ts, "temperature_2m": value}
-        for ts, value in zip(range(start, end, step), values)
-    ]
-    return _json_bytes(records), "json"
-
-
 # source name -> function returning (file content, file extension)
 LOADERS: dict[str, Callable[[], tuple[bytes, str]]] = {
-    "weather": _load_weather,
+    "weather": lambda: (_json_bytes(fetch_weather()), "json"),
     "transport": lambda: (_json_bytes(fetch_locations()), "json"),
     "gtfs_rt": lambda: (_json_bytes(fetch_gtfs_rt()), "json"),
     "municipality": lambda: (fetch_municipality().content, "xlsx"),

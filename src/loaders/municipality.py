@@ -2,11 +2,11 @@
 
 import logging
 
-logger = logging.getLogger(__name__)
-
 import requests
 
 from src.config import config
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_municipality() -> requests.Response:
@@ -20,6 +20,7 @@ def fetch_municipality() -> requests.Response:
         requests.Response: Response containing the XLSX file
     """
     try:
+        # The BFS endpoint serves the XLSX export on POST
         response = requests.post(
             f"{config.MUNICIPALITY_XLSX}",
             timeout=10,

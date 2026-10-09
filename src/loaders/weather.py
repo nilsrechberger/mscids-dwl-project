@@ -2,35 +2,36 @@
 
 import logging
 
+import requests
+
+from src.config import config
+
 logger = logging.getLogger(__name__)
 
-import openmeteo_requests
 
-from openmeteo_sdk.WeatherApiResponse import WeatherApiResponse
-from retry_requests import retry
-
-
-def fetch_weather(url: str) -> list[WeatherApiResponse]:
+def fetch_weather() -> dict:
     """
-    Fetch data from Open-Meteo data API
+    Fetch hourly temperature data from the Open-Meteo archive API
 
     Args:
-        url: API Endpoint
+        None
 
     Returns:
-        list: Weather API Responses
+        dict: API response
     """
+    params: dict[str, str | float] = {
+        "latitude": 47.0002,
+        "longitude": 8.0143,
+        "start_date": "2026-09-14",
+        "end_date": "2026-09-28",
+        "hourly": "temperature_2m",
+    }
     try:
-        openmeteo = openmeteo_requests.Client()
-        params = {
-            "latitude": 47.0002,
-            "longitude": 8.0143,
-            "start_date": "2026-09-14",
-            "end_date": "2026-09-28",
-            "hourly": "temperature_2m",
-        }
-        responses = openmeteo.weather_api(url, params=params)
-    except Exception as e:
+        response = requests.get(
+            str(config.WEATHER_API_ENDPOINT), params=params, timeout=10
+        )
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
         logger.error("%s", e)
         raise
-    return responses
+    return response.json()

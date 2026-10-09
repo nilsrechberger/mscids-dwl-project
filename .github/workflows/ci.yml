@@ -9,12 +9,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      WEATHER_API_ENDPOINT: https://archive-api.open-meteo.com/v1/archive
-      TRANSPORT_API_ENDPOINT: http://transport.opendata.ch/v1
-      GTFS_RT_API_ENDPOINT: https://api.opentransportdata.swiss/la/gtfs-rt
-      GTFS_RT_API_TOKEN: ${{ secrets.GTFS_RT_API_TOKEN }}
-      MUNICIPALITY_XLSX: "https://www.agvchapp.bfs.admin.ch/de/state/results/xls?SnapshotDate=01.01.2026"
     steps:
       - uses: actions/checkout@v4
 

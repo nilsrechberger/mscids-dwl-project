@@ -22,6 +22,6 @@ Searches locations through the Swiss public transport API (`TRANSPORT_API_ENDPOI
 
 ## Weather
 
-[weather.py](weather.py) — `fetch_weather(url) -> list[WeatherApiResponse]`
+[weather.py](weather.py) — `fetch_weather() -> dict`
 
-Fetches hourly `temperature_2m` from Open-Meteo for a fixed location and date range (2026-09-14 to 2026-09-28). `url` is the API endpoint.
+Fetches hourly `temperature_2m` as JSON from the Open-Meteo archive API (`WEATHER_API_ENDPOINT`) for a fixed location and date range (2026-09-14 to 2026-09-28).

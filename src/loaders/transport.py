@@ -2,11 +2,11 @@
 
 import logging
 
-logger = logging.getLogger(__name__)
-
 import requests
 
 from src.config import config
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_locations(query: str = "Basel") -> dict:
@@ -14,7 +14,7 @@ def fetch_locations(query: str = "Basel") -> dict:
     Fetch transport data by location
 
     Args:
-        location: Specifies the location name to search for
+        query: Location name to search for
 
     Returns:
         dict: API response

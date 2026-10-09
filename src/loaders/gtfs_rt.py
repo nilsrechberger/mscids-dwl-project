@@ -2,11 +2,11 @@
 
 import logging
 
-logger = logging.getLogger(__name__)
-
 import requests
 
 from src.config import config
+
+logger = logging.getLogger(__name__)
 
 
 def fetch_gtfs_rt() -> dict:
