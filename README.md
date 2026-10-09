@@ -78,6 +78,30 @@ python -m pip install -r requirements-dev.txt
 
 Run everything from the repository root, e.g. `python -m pytest`.
 
+## Docker / AWS Lambda
+
+The loaders are packaged as an AWS Lambda container image (see `Dockerfile`). The handler is `src.run.handler` and expects an event like `{"source": "weather"}`, where the source is one of `weather`, `transport`, `gtfs_rt`, `municipality`.
+
+### Run locally
+
+Fill in `.env` and make AWS credentials available (environment variables or `~/.aws`), then start the Lambda Runtime Interface Emulator:
+
+```bash
+docker-compose up --build
+
+curl -XPOST http://localhost:9000/2015-03-31/functions/function/invocations \
+  -d '{"source": "weather"}'
+```
+
+### Deploy
+
+1. Create an ECR repository, then build and push the image. Add `--platform linux/arm64` if the function runs on arm64.
+2. Create the Lambda function from the image.
+   - Execution role needs `s3:PutObject` on the data lake bucket.
+   - Set the variables from `.env.example` as environment variables (keep `GTFS_RT_API_TOKEN` in Secrets Manager or SSM).
+   - Use a timeout well above the 3 s default and at least 512 MB memory.
+3. Create one EventBridge Scheduler rule per source, each passing `{"source": "<name>"}` as input.
+
 # Contact
 
 - Nils Rechberger: nils.rechberger@stud.hslu.ch

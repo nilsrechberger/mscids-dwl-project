@@ -35,3 +35,11 @@ jobs:
 
       - name: Run tests
         run: python -m pytest
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Lambda image
+        run: docker build -t dwl-loaders .

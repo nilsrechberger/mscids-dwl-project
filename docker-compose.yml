@@ -1,0 +1,19 @@
+# Runs the Lambda image locally with the Runtime Interface Emulator:
+#   docker-compose up --build
+#   curl -XPOST http://localhost:9000/2015-03-31/functions/function/invocations \
+#     -d '{"source": "weather"}'
+services:
+  lambda:
+    build: .
+    ports:
+      - "9000:8080"
+    env_file: .env
+    environment:
+      # AWS credentials are taken from the host environment or ~/.aws
+      AWS_ACCESS_KEY_ID:
+      AWS_SECRET_ACCESS_KEY:
+      AWS_SESSION_TOKEN:
+      AWS_DEFAULT_REGION:
+      AWS_PROFILE:
+    volumes:
+      - ~/.aws:/root/.aws:ro
