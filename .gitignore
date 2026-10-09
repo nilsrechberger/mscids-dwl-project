@@ -216,3 +216,10 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# SQLite
+.cache.sqlite
+# Application logs
+logs/
+# Local test output
+tests/output/
