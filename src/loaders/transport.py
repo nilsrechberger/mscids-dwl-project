@@ -5,6 +5,7 @@ import logging
 import requests
 
 from src.config import config
+from src.http import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ def fetch_locations(query: str = "Basel") -> dict:
         dict: API response
     """
     try:
-        response = requests.get(
+        response = get_session().get(
             f"{config.TRANSPORT_API_ENDPOINT}/locations",
             params={"query": query},
             timeout=10,

@@ -12,9 +12,10 @@ from src.loaders.weather import fetch_weather
 
 def test_fetch_weather() -> None:
     """Returns the JSON body and requests hourly temperature"""
-    response = MagicMock()
-    response.json.return_value = {"hourly": {"temperature_2m": [1.0]}}
-    with patch("src.loaders.weather.requests.get", return_value=response) as get, patch(
+    session = MagicMock()
+    get = session.get
+    get.return_value.json.return_value = {"hourly": {"temperature_2m": [1.0]}}
+    with patch("src.loaders.weather.get_session", return_value=session), patch(
         "src.loaders.weather.config.WEATHER_API_ENDPOINT", "http://api"
     ):
         result = fetch_weather()
@@ -26,10 +27,9 @@ def test_fetch_weather() -> None:
 
 def test_fetch_weather_error() -> None:
     """Re-raises request errors"""
-    with patch(
-        "src.loaders.weather.requests.get",
-        side_effect=requests.exceptions.ConnectionError("boom"),
-    ):
+    session = MagicMock()
+    session.get.side_effect = requests.exceptions.ConnectionError("boom")
+    with patch("src.loaders.weather.get_session", return_value=session):
         with pytest.raises(requests.exceptions.ConnectionError):
             fetch_weather()
 

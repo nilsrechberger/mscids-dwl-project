@@ -5,6 +5,7 @@ import logging
 import requests
 
 from src.config import config
+from src.http import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ def fetch_weather() -> dict:
         "hourly": "temperature_2m",
     }
     try:
-        response = requests.get(
+        response = get_session().get(
             str(config.WEATHER_API_ENDPOINT), params=params, timeout=10
         )
         response.raise_for_status()

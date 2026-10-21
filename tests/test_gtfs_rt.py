@@ -12,9 +12,10 @@ from src.loaders.gtfs_rt import fetch_gtfs_rt
 
 def test_fetch_gtfs_rt() -> None:
     """Returns the JSON body and sends the token as Authorization header"""
-    response = MagicMock()
-    response.json.return_value = {"header": {}}
-    with patch("src.loaders.gtfs_rt.requests.get", return_value=response) as get, patch(
+    session = MagicMock()
+    get = session.get
+    get.return_value.json.return_value = {"header": {}}
+    with patch("src.loaders.gtfs_rt.get_session", return_value=session), patch(
         "src.loaders.gtfs_rt.config.GTFS_RT_API_TOKEN", "secret"
     ), patch("src.loaders.gtfs_rt.config.GTFS_RT_API_ENDPOINT", "http://api"):
         result = fetch_gtfs_rt()
@@ -26,10 +27,9 @@ def test_fetch_gtfs_rt() -> None:
 
 def test_fetch_gtfs_rt_error() -> None:
     """Re-raises request errors"""
-    with patch(
-        "src.loaders.gtfs_rt.requests.get",
-        side_effect=requests.exceptions.ConnectionError("boom"),
-    ):
+    session = MagicMock()
+    session.get.side_effect = requests.exceptions.ConnectionError("boom")
+    with patch("src.loaders.gtfs_rt.get_session", return_value=session):
         with pytest.raises(requests.exceptions.ConnectionError):
             fetch_gtfs_rt()
 

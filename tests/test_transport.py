@@ -12,11 +12,10 @@ from src.loaders.transport import fetch_locations
 
 def test_fetch_locations() -> None:
     """Returns the JSON body and passes the query"""
-    response = MagicMock()
-    response.json.return_value = {"stations": []}
-    with patch(
-        "src.loaders.transport.requests.get", return_value=response
-    ) as get, patch(
+    session = MagicMock()
+    get = session.get
+    get.return_value.json.return_value = {"stations": []}
+    with patch("src.loaders.transport.get_session", return_value=session), patch(
         "src.loaders.transport.config.TRANSPORT_API_ENDPOINT", "http://api"
     ):
         result = fetch_locations(query="Bern")
@@ -28,10 +27,9 @@ def test_fetch_locations() -> None:
 
 def test_fetch_locations_error() -> None:
     """Re-raises request errors"""
-    with patch(
-        "src.loaders.transport.requests.get",
-        side_effect=requests.exceptions.Timeout("slow"),
-    ):
+    session = MagicMock()
+    session.get.side_effect = requests.exceptions.Timeout("slow")
+    with patch("src.loaders.transport.get_session", return_value=session):
         with pytest.raises(requests.exceptions.Timeout):
             fetch_locations()
 
