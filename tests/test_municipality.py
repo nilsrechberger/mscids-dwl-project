@@ -11,8 +11,9 @@ from src.loaders.municipality import fetch_municipality
 
 def test_fetch_municipality() -> None:
     """Returns the raw response with the binary content"""
-    response = MagicMock(content=b"xlsx-bytes")
-    with patch("src.loaders.municipality.requests.post", return_value=response), patch(
+    session = MagicMock()
+    session.post.return_value = MagicMock(content=b"xlsx-bytes")
+    with patch("src.loaders.municipality.get_session", return_value=session), patch(
         "src.loaders.municipality.config.MUNICIPALITY_XLSX", "http://bfs"
     ):
         result = fetch_municipality()
@@ -22,9 +23,11 @@ def test_fetch_municipality() -> None:
 
 def test_fetch_municipality_error() -> None:
     """Re-raises HTTP errors"""
-    response = MagicMock()
-    response.raise_for_status.side_effect = requests.exceptions.HTTPError("500")
-    with patch("src.loaders.municipality.requests.post", return_value=response):
+    session = MagicMock()
+    session.post.return_value.raise_for_status.side_effect = (
+        requests.exceptions.HTTPError("500")
+    )
+    with patch("src.loaders.municipality.get_session", return_value=session):
         with pytest.raises(requests.exceptions.HTTPError):
             fetch_municipality()
 

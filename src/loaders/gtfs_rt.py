@@ -5,6 +5,7 @@ import logging
 import requests
 
 from src.config import config
+from src.http import get_session
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ def fetch_gtfs_rt() -> dict:
         dict: Request response
     """
     try:
-        response = requests.get(
+        response = get_session().get(
             url=f"{config.GTFS_RT_API_ENDPOINT}?format=JSON",
             headers={"Authorization": f"{config.GTFS_RT_API_TOKEN}"},
             timeout=10,
