@@ -67,6 +67,50 @@ s3://<S3_BUCKET>/raw/<source>/dt=YYYY-MM-DD/HHMMSS.<ext>
 
 > Known limitation: the weather location and date range and the transport query ("Basel") are currently hardcoded in the loaders.
 
+## Local Ist-Daten v2 validation spike
+
+The branch `spike/istdaten-profile` contains a local-only validation pipeline for the proposed replacement of the GTFS-RT polling approach with the official Ist-Daten v2 daily files. It does not change the existing Lambda/S3 implementation yet. The existing loaders and `src/run.py` remain the basis for the reviewed production integration.
+
+The local pipeline performs the following steps:
+
+```text
+Ist-Daten v2 daily CSV
+        ↓
+GTFS Static stops.txt (BPUIC/SLOID matching)
+        ↓
+BFS municipality boundaries (GeoJSON, 01.01.2026)
+        ↓
+Municipality-level transport aggregates
+        ↓
+Stop-weighted municipality weather points
+        ↓
+Open-Meteo hourly weather batches
+        ↓
+Daily transport/weather analysis table
+```
+
+The raw Ist-Daten and weather values are never deleted because of quality issues. Bronze keeps the source representation unchanged. Silver adds fields such as `delay_raw_seconds`, `delay_quality` and `delay_exclusion_reason`. Gold queries apply metric-specific filters, for example using only `REAL` and plausible values for measured-delay averages.
+
+The current local spike validated one day of data with 2,591,680 Ist-Daten rows, 2,044 municipality aggregates and 49,704 hourly weather rows. The municipality match rate was 97.76%; 758 municipalities had at least 500 observations. Weather is represented by the mean coordinates of GTFS stops assigned to each municipality and is joined using `gdenr + date`.
+
+Useful local commands from the repository root are:
+
+```bash
+# Tests and static checks
+python -m pytest
+black scripts tests
+mypy src tests
+
+# Profile and validate local source data
+python scripts/profile_istdaten.py --input <istdaten.csv> --output-dir <profile-dir>
+python scripts/extract_gtfs_stops.py --zip <gtfs.zip> --output <stops.csv>
+python scripts/profile_delay_quality.py --input <istdaten.csv> --output <delay-profile.json>
+```
+
+The scripts under `scripts/` are intentionally local spike tooling. Large source files, downloaded GTFS archives, GeoJSON boundaries and generated outputs belong under `.work/` and must not be committed.
+
+The intended workflow is to finish and validate the local spike first, commit and push it for peer review, and only then adapt Terraform, S3 buckets, scheduling and the production Lambda integration.
+
 ## Setup
 
 ### 1. Clone this repository
