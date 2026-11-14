@@ -4,3 +4,4 @@ black==26.5.1
 mypy==2.4.0
 types-requests==2.33.0.20260906
 boto3-stubs[s3]==1.43.107
+types-openpyxl==3.1.5.20261017

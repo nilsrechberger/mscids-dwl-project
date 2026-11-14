@@ -15,6 +15,7 @@ class Config:
     GTFS_RT_API_ENDPOINT = os.getenv("GTFS_RT_API_ENDPOINT")
     GTFS_RT_API_TOKEN = os.getenv("GTFS_RT_API_TOKEN")
     MUNICIPALITY_XLSX = os.getenv("MUNICIPALITY_XLSX")
+    TRANSPORT_BATCH_SIZE = int(os.getenv("TRANSPORT_BATCH_SIZE", "300"))
     S3_BUCKET = os.getenv("S3_BUCKET")
     HTTP_MAX_RETRIES = int(os.getenv("HTTP_MAX_RETRIES", "3"))
     HTTP_BACKOFF_SECONDS = float(os.getenv("HTTP_BACKOFF_SECONDS", "1"))
