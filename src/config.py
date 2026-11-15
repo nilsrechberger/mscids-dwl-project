@@ -15,6 +15,7 @@ class Config:
     GTFS_RT_API_ENDPOINT = os.getenv("GTFS_RT_API_ENDPOINT")
     GTFS_RT_API_TOKEN = os.getenv("GTFS_RT_API_TOKEN")
     MUNICIPALITY_XLSX = os.getenv("MUNICIPALITY_XLSX")
+    ISTDATEN_V2_ENDPOINT = os.getenv("ISTDATEN_V2_ENDPOINT")
     TRANSPORT_BATCH_SIZE = int(os.getenv("TRANSPORT_BATCH_SIZE", "300"))
     S3_BUCKET = os.getenv("S3_BUCKET")
     HTTP_MAX_RETRIES = int(os.getenv("HTTP_MAX_RETRIES", "3"))

@@ -63,35 +63,33 @@ Each loader fetches one source and `src/run.py` writes the response unchanged to
 s3://<S3_BUCKET>/raw/<source>/dt=YYYY-MM-DD/HHMMSS.<ext>
 ```
 
-`<source>` is one of `weather`, `transport`, `gtfs_rt`, `municipality`. Parsing and transformation happen in later pipeline stages.
+`<source>` includes `weather`, `transport`, `gtfs_rt`, `municipality` and the streaming `istdaten_v2` loader. The Ist-Daten-v2 daily CSV is written to `raw/istdaten_v2/` without loading the complete file into memory. Parsing and transformation happen in later pipeline stages.
 
-> Known limitation: the weather location and date range and the transport query ("Basel") are currently hardcoded in the loaders.
+## Ist-Daten v2 municipality pipeline
 
-## Local Ist-Daten v2 validation spike
-
-The branch `spike/istdaten-profile` contains a local-only validation pipeline for the proposed replacement of the GTFS-RT polling approach with the official Ist-Daten v2 daily files. It does not change the existing Lambda/S3 implementation yet. The existing loaders and `src/run.py` remain the basis for the reviewed production integration.
+The feature branch `feat/istdaten-v2-municipality-pipeline` contains the locally validated implementation for the official Ist-Daten v2 daily files. Bronze keeps the source CSV unchanged; Silver normalizes the German source columns and adds delay-quality fields; Gold aggregates transport and weather by BFS municipality and operating date.
 
 The local pipeline performs the following steps:
 
 ```text
-Ist-Daten v2 daily CSV
+Ist-Daten v2 daily CSV (Bronze)
         ↓
-GTFS Static stops.txt (BPUIC/SLOID matching)
+English Silver normalization and delay quality
+        ↓
+GTFS Static stops.txt (SLOID/BPUIC matching)
         ↓
 BFS municipality boundaries (GeoJSON, 01.01.2026)
         ↓
-Municipality-level transport aggregates
+Municipality-level transport daily aggregates
         ↓
-Stop-weighted municipality weather points
+Stop-weighted municipality weather points and Open-Meteo batches
         ↓
-Open-Meteo hourly weather batches
-        ↓
-Daily transport/weather analysis table
+Gold `municipality_daily`
 ```
 
 The raw Ist-Daten and weather values are never deleted because of quality issues. Bronze keeps the source representation unchanged. Silver adds fields such as `delay_raw_seconds`, `delay_quality` and `delay_exclusion_reason`. Gold queries apply metric-specific filters, for example using only `REAL` and plausible values for measured-delay averages.
 
-The current local spike validated one day of data with 2,591,680 Ist-Daten rows, 2,044 municipality aggregates and 49,704 hourly weather rows. The municipality match rate was 97.76%; 758 municipalities had at least 500 observations. Weather is represented by the mean coordinates of GTFS stops assigned to each municipality and is joined using `gdenr + date`.
+The current local validation used 2,139,124 Ist-Daten rows from 14 November 2026, matched 99.839% of transport rows to GTFS stops, assigned 2,094,022 rows to BFS municipalities, and fetched 49,704 hourly weather rows for 2,071 municipalities. Weather is represented by the mean coordinates of GTFS stops assigned to each municipality and is joined using `gdenr + date`.
 
 Useful local commands from the repository root are:
 
@@ -105,11 +103,18 @@ mypy src tests
 python scripts/profile_istdaten.py --input <istdaten.csv> --output-dir <profile-dir>
 python scripts/extract_gtfs_stops.py --zip <gtfs.zip> --output <stops.csv>
 python scripts/profile_delay_quality.py --input <istdaten.csv> --output <delay-profile.json>
+
+# Silver and Gold transformations
+python -m scripts.normalize_istdaten_silver --input <istdaten.csv> --output <silver.csv>
+python -m scripts.join_istdaten_municipalities --silver <silver.csv> --stops <stops_municipalities.csv> --output <mapped.csv>
+python scripts/aggregate_silver_municipality_daily.py --input <mapped.csv> --output <transport_daily.csv>
+python scripts/aggregate_weather_daily.py --input <weather_hourly.csv> --output <weather_daily.csv>
+python scripts/join_municipality_daily.py --transport <transport_daily.csv> --weather <weather_daily.csv> --output <municipality_daily.csv>
 ```
 
 The scripts under `scripts/` are intentionally local spike tooling. Large source files, downloaded GTFS archives, GeoJSON boundaries and generated outputs belong under `.work/` and must not be committed.
 
-The intended workflow is to finish and validate the local spike first, commit and push it for peer review, and only then adapt Terraform, S3 buckets, scheduling and the production Lambda integration.
+The intended workflow is to finish and validate the local pipeline first, commit and push it for peer review, and only then adapt Terraform, S3 buckets, scheduling and the production Lambda integration. Generated source files and outputs belong under `.work/` and must not be committed.
 
 ## Setup
 

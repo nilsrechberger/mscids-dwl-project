@@ -15,15 +15,16 @@ import logging
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
-from src.loaders.gtfs_rt import fetch_gtfs_rt
 from src.config import config
+from src.loaders.gtfs_rt import fetch_gtfs_rt
+from src.loaders.istdaten_v2 import fetch_istdaten_v2
 from src.loaders.municipality import fetch_municipality, parse_municipality_names
 from src.loaders.transport import fetch_all_locations
 from src.loaders.weather import fetch_weather
 from src.log import setup_logging
-from src.storage import read_latest_raw, write_raw
+from src.storage import read_latest_raw, write_raw, write_raw_stream
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,10 @@ LOADERS: dict[str, Callable[[], tuple[bytes, str]]] = {
     "gtfs_rt": lambda: (_json_bytes(fetch_gtfs_rt()), "json"),
     "municipality": lambda: (fetch_municipality().content, "xlsx"),
 }
+
+
+# Large sources are streamed directly to S3 and never materialized in memory.
+STREAM_LOADERS = {"istdaten_v2": fetch_istdaten_v2}
 
 
 # sources loaded in several invocations: name -> function(batch, batch_size)
@@ -129,9 +134,17 @@ def run(source: str) -> str:
         while result.next_batch is not None:
             result = run_batch(source, result.next_batch)
         return result.uri
+    if source in STREAM_LOADERS:
+        response = STREAM_LOADERS[source]()
+        try:
+            uri = write_raw_stream(source, cast(Any, response.raw), "csv")
+        finally:
+            response.close()
+        logger.info("Loaded %s as stream -> %s", source, uri)
+        return uri
     if source not in LOADERS:
         raise ValueError(
-            f"Unknown source '{source}', choose from {sorted([*LOADERS, *BATCHED_LOADERS])}"
+            f"Unknown source '{source}', choose from {sorted([*LOADERS, *BATCHED_LOADERS, *STREAM_LOADERS])}"
         )
 
     data, extension = LOADERS[source]()
@@ -159,6 +172,6 @@ if __name__ == "__main__":
     setup_logging()
     if len(sys.argv) != 2:
         sys.exit(
-            f"Usage: python -m src.run <{'|'.join(sorted([*LOADERS, *BATCHED_LOADERS]))}>"
+            f"Usage: python -m src.run <{'|'.join(sorted([*LOADERS, *BATCHED_LOADERS, *STREAM_LOADERS]))}>"
         )
     run(sys.argv[1])
