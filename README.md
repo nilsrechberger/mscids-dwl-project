@@ -181,6 +181,7 @@ curl -XPOST http://localhost:9000/2015-03-31/functions/function/invocations \
    - Set the variables from `.env.example` as environment variables (keep `GTFS_RT_API_TOKEN` in Secrets Manager or SSM).
    - Use a timeout well above the 3 s default and at least 512 MB memory.
 3. Create one EventBridge Scheduler rule per source, each passing `{"source": "<name>"}` as input.
+4. `transport` is loaded in batches of `TRANSPORT_BATCH_SIZE` municipalities (default 300) so one invocation stays below the Lambda timeout. Run the `municipality` source first: transport reads the municipality names from its newest raw file, so they are not downloaded for every batch. Then invoke it with `{"source": "transport", "batch": 0}`. The execution role also needs `s3:ListBucket` and `s3:GetObject` on the bucket. The response contains `next_batch` (`null` after the last batch). Let the scheduler start a Step Functions state machine that loops on `next_batch` until it is `null`. Each batch is written as `raw/transport/dt=YYYY-MM-DD/HHMMSS_partNNNN.json`. Locally, `python -m src.run transport` runs all batches in sequence.
 
 # Contact
 

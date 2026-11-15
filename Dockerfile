@@ -5,5 +5,5 @@ RUN python -m pip install --no-cache-dir -r requirements.txt --target "${LAMBDA_
 
 COPY src ${LAMBDA_TASK_ROOT}/src
 
-# Event: {"source": "weather"}
+# Event: {"source": "weather"}, or {"source": "transport", "batch": 0}
 CMD ["src.run.handler"]

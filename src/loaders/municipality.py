@@ -1,8 +1,10 @@
 """Downloads the municipality file from BFS"""
 
 import logging
+from io import BytesIO
 
 import requests
+from openpyxl import load_workbook
 
 from src.config import config
 from src.http import get_session
@@ -29,3 +31,20 @@ def fetch_municipality() -> requests.Response:
         logger.error("%s", e)
         raise
     return response
+
+
+def parse_municipality_names(xlsx: bytes) -> list[str]:
+    """
+    Extract the unique municipality names from the BFS XLSX file
+
+    Args:
+        xlsx: Raw content of the XLSX file
+
+    Returns:
+        list[str]: Municipality names in file order, without duplicates
+    """
+    sheet = load_workbook(BytesIO(xlsx), read_only=True)["Daten"]
+    rows = sheet.iter_rows(values_only=True)
+    column = list(next(rows)).index("Gemeindename")
+    names = (row[column] for row in rows if row[column])
+    return list(dict.fromkeys(str(n) for n in names))
