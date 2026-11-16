@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.run import BatchResult, handler, run, run_batch
-from src.storage import build_key, read_latest_raw, write_raw
+from src.storage import build_key, read_latest_raw, write_raw, write_raw_stream
 
 
 def test_build_key() -> None:
@@ -40,6 +40,21 @@ def test_write_raw() -> None:
     assert kwargs["Bucket"] == "my-bucket"
     assert kwargs["Body"] == b"{}"
     assert uri == f"s3://my-bucket/{kwargs['Key']}"
+
+
+def test_write_raw_stream() -> None:
+    """Uploads a stream without passing bytes to put_object"""
+    client = MagicMock()
+    stream = MagicMock()
+    with patch("src.storage.boto3.client", return_value=client), patch(
+        "src.storage.config.S3_BUCKET", "my-bucket"
+    ):
+        uri = write_raw_stream("istdaten_v2", stream, "csv")
+
+    kwargs = client.upload_fileobj.call_args.args
+    assert kwargs[0] is stream
+    assert kwargs[1] == "my-bucket"
+    assert uri == f"s3://my-bucket/{kwargs[2]}"
 
 
 def test_read_latest_raw() -> None:
@@ -83,6 +98,18 @@ def test_run_unknown_source() -> None:
     """Rejects unknown source names"""
     with pytest.raises(ValueError):
         run("nope")
+
+
+def test_run_istdaten_v2_streams_and_closes_response() -> None:
+    """Ist-Daten v2 is uploaded from the response stream and then closed"""
+    response = MagicMock()
+    with patch("src.run.STREAM_LOADERS", {"istdaten_v2": lambda: response}), patch(
+        "src.run.write_raw_stream", return_value="s3://b/k"
+    ) as write:
+        assert run("istdaten_v2") == "s3://b/k"
+
+    write.assert_called_once_with("istdaten_v2", response.raw, "csv")
+    response.close.assert_called_once()
 
 
 @pytest.mark.parametrize(

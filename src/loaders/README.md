@@ -2,6 +2,12 @@
 
 Each loader fetches raw data from one external source. Endpoints and tokens come from `src.config`.
 
+## Ist-Daten v2
+
+[istdaten_v2.py](istdaten_v2.py) — `fetch_istdaten_v2() -> requests.Response`
+
+Streams the official daily Ist-Daten v2 CSV from `ISTDATEN_V2_ENDPOINT`. The response stream is uploaded unchanged to `raw/istdaten_v2/` so the large CSV is not materialized in Lambda memory. Column normalization and delay-quality flags belong to later Silver processing.
+
 ## GTFS-RT
 
 [gtfs_rt.py](gtfs_rt.py) — `fetch_gtfs_rt() -> dict`

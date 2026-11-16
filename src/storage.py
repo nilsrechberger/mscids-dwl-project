@@ -1,6 +1,7 @@
 """Writes raw loader output to S3"""
 
 from datetime import datetime, timezone
+from typing import BinaryIO
 
 import boto3
 
@@ -49,6 +50,18 @@ def write_raw(source: str, data: bytes, extension: str, part: int | None = None)
 
     key = build_key(source, extension, part=part)
     boto3.client("s3").put_object(Bucket=config.S3_BUCKET, Key=key, Body=data)
+    return f"s3://{config.S3_BUCKET}/{key}"
+
+
+def write_raw_stream(
+    source: str, stream: BinaryIO, extension: str, part: int | None = None
+) -> str:
+    """Upload a raw stream without materializing it in Lambda memory."""
+    if not config.S3_BUCKET:
+        raise RuntimeError("S3_BUCKET is not set")
+
+    key = build_key(source, extension, part=part)
+    boto3.client("s3").upload_fileobj(stream, config.S3_BUCKET, key)
     return f"s3://{config.S3_BUCKET}/{key}"
 
 
