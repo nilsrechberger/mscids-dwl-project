@@ -63,7 +63,33 @@ Each loader fetches one source and `src/run.py` writes the response unchanged to
 s3://<S3_BUCKET>/raw/<source>/dt=YYYY-MM-DD/HHMMSS.<ext>
 ```
 
-`<source>` includes `weather`, `transport`, `gtfs_rt`, `municipality` and the streaming `istdaten_v2` loader. The Ist-Daten-v2 daily CSV is written to `raw/istdaten_v2/` without loading the complete file into memory. Parsing and transformation happen in later pipeline stages.
+When a run context is supplied, deterministic keys are used instead:
+
+```text
+s3://<S3_BUCKET>/raw/<source>/dt=YYYY-MM-DD/run=<run_id>/part0000.<ext>
+s3://<S3_BUCKET>/raw/<source>/dt=YYYY-MM-DD/run=<run_id>/manifest_part0000.json
+s3://<S3_BUCKET>/raw/<source>/dt=YYYY-MM-DD/run=<run_id>/manifest.json
+```
+
+`<source>` includes `istdaten_v2`, `municipality_weather`, `municipality`, `weather`, `transport` and `gtfs_rt`. The Ist-Daten-v2 daily CSV is written to `raw/istdaten_v2/` without loading the complete file into memory. Parsing and transformation happen in later pipeline stages.
+
+## Run contract and local validation
+
+Production-style batched events use one stable `run_id` for all batches. The Lambda does not generate a new ID per invocation. A `municipality_weather` event must contain `run_id`, `execution_id`, `observation_date` and `point_snapshot`:
+
+```json
+{
+  "source": "municipality_weather",
+  "run_id": "municipality-weather-2026-11-15-points-v1",
+  "execution_id": "local-smoke-test",
+  "observation_date": "2026-11-15",
+  "point_snapshot": "points-2026-11-16-v1",
+  "batch": 0,
+  "batch_size": 50
+}
+```
+
+Every completed batch receives a `manifest_partXXXX.json`. `src.runs.finalize_run()` aggregates these manifests. Silver processing should call `require_completed_run()` and only continue when the final manifest has `status = completed`.
 
 ## Ist-Daten v2 municipality pipeline
 
@@ -110,6 +136,15 @@ python -m scripts.join_istdaten_municipalities --silver <silver.csv> --stops <st
 python scripts/aggregate_silver_municipality_daily.py --input <mapped.csv> --output <transport_daily.csv>
 python scripts/aggregate_weather_daily.py --input <weather_hourly.csv> --output <weather_daily.csv>
 python scripts/join_municipality_daily.py --transport <transport_daily.csv> --weather <weather_daily.csv> --output <municipality_daily.csv>
+
+# Production run-contract smoke test; no AWS and no API call
+python -m scripts.smoke_test_run_contract \
+  --points <municipality_weather_points.csv> \
+  --run-id municipality-weather-2026-11-15-points-v1 \
+  --execution-id local-smoke-test \
+  --observation-date 2026-11-15 \
+  --point-snapshot points-2026-11-16-v1 \
+  --batch-size 50
 ```
 
 The scripts under `scripts/` are intentionally local spike tooling. Large source files, downloaded GTFS archives, GeoJSON boundaries and generated outputs belong under `.work/` and must not be committed.
@@ -165,7 +200,7 @@ python -m src.run weather     # run one loader (needs S3_BUCKET and AWS credenti
 
 ## Docker / AWS Lambda
 
-The loaders are packaged as an AWS Lambda container image (see `Dockerfile`). The handler is `src.run.handler` and expects an event like `{"source": "weather"}`, where the source is one of `weather`, `transport`, `gtfs_rt`, `municipality`.
+The loaders are packaged as an AWS Lambda container image (see `Dockerfile`). The handler is `src.run.handler`. Production-style municipality-weather events contain `source`, `run_id`, `execution_id`, `observation_date`, `point_snapshot`, `batch` and `batch_size`.
 
 ### Run locally
 

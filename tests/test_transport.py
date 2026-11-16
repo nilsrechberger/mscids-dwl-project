@@ -7,7 +7,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from src.loaders.transport import fetch_all_locations, fetch_locations
+from src.loaders.transport import (
+    fetch_all_locations,
+    fetch_all_locations_with_status,
+    fetch_locations,
+)
 
 
 def test_fetch_locations() -> None:
@@ -48,14 +52,17 @@ def test_fetch_all_locations() -> None:
     assert queries == ["Bern", "Basel"]
 
 
-def test_fetch_all_locations_skips_failures() -> None:
-    """One failing municipality does not abort the run"""
+def test_fetch_all_locations_reports_partial_failures() -> None:
+    """Partial failures remain visible to an orchestrator."""
     session = MagicMock()
     ok = MagicMock()
     ok.json.return_value = {"n": 1}
     session.get.side_effect = [requests.exceptions.Timeout("slow"), ok]
     with patch("src.loaders.transport.get_session", return_value=session):
-        assert fetch_all_locations(["Bern", "Basel"]) == {"Basel": {"n": 1}}
+        result = fetch_all_locations_with_status(["Bern", "Basel"])
+
+    assert result.results == {"Basel": {"n": 1}}
+    assert result.failed == ("Bern",)
 
 
 def test_fetch_all_locations_all_fail() -> None:
@@ -63,8 +70,8 @@ def test_fetch_all_locations_all_fail() -> None:
     session = MagicMock()
     session.get.side_effect = requests.exceptions.Timeout("slow")
     with patch("src.loaders.transport.get_session", return_value=session):
-        with pytest.raises(requests.exceptions.Timeout):
-            fetch_all_locations(["Bern"])
+        with pytest.raises(requests.exceptions.RequestException, match="failed"):
+            fetch_all_locations_with_status(["Bern"])
 
 
 @pytest.mark.network

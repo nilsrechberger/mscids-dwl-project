@@ -8,7 +8,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.run import BatchResult, handler, run, run_batch
-from src.storage import build_key, read_latest_raw, write_raw, write_raw_stream
+from src.loaders.transport import LocationFetchResult
+from src.storage import (
+    build_key,
+    read_latest_raw,
+    write_raw,
+    write_raw_stream,
+    write_run_manifest,
+)
 
 
 def test_build_key() -> None:
@@ -26,6 +33,53 @@ def test_build_key_with_part() -> None:
         build_key("transport", "json", now, part=3)
         == "raw/transport/dt=2026-10-02/101530_part0003.json"
     )
+
+
+def test_build_key_with_run_id_is_deterministic() -> None:
+    """Run IDs create stable keys independent of invocation time."""
+    first = build_key(
+        "transport",
+        "json",
+        datetime(2026, 10, 2, 10, 15, 30, tzinfo=timezone.utc),
+        part=3,
+        run_id="2026-10-02-run-1",
+    )
+    second = build_key(
+        "transport",
+        "json",
+        datetime(2026, 10, 2, 18, 45, 0, tzinfo=timezone.utc),
+        part=3,
+        run_id="2026-10-02-run-1",
+    )
+    assert first == second
+    assert first == "raw/transport/dt=2026-10-02/run=2026-10-02-run-1/part0003.json"
+
+
+def test_write_run_manifest() -> None:
+    """Manifest metadata is written below the deterministic run prefix."""
+    client = MagicMock()
+    now = datetime(2026, 10, 2, 10, 15, 30, tzinfo=timezone.utc)
+    with patch("src.storage.boto3.client", return_value=client), patch(
+        "src.storage.config.S3_BUCKET", "my-bucket"
+    ):
+        uri = write_run_manifest("transport", "run-1", {"failed": 2}, now=now)
+
+    assert uri == "s3://my-bucket/raw/transport/dt=2026-10-02/run=run-1/manifest.json"
+    kwargs = client.put_object.call_args.kwargs
+    assert kwargs["ContentType"] == "application/json"
+    assert json.loads(kwargs["Body"])["failed"] == 2
+
+
+def test_write_batch_manifest_uses_part_key() -> None:
+    """Each completed batch gets its own deterministic manifest."""
+    client = MagicMock()
+    now = datetime(2026, 10, 2, 10, 15, 30, tzinfo=timezone.utc)
+    with patch("src.storage.boto3.client", return_value=client), patch(
+        "src.storage.config.S3_BUCKET", "my-bucket"
+    ):
+        uri = write_run_manifest("transport", "run-1", {"batch": 3}, now=now, part=3)
+
+    assert uri.endswith("/manifest_part0003.json")
 
 
 def test_write_raw() -> None:
@@ -136,8 +190,10 @@ def _transport_patches(names: list[str]):  # type: ignore[no-untyped-def]
         patch("src.run.read_latest_raw", return_value=b"x"),
         patch("src.run.parse_municipality_names", return_value=names),
         patch(
-            "src.run.fetch_all_locations",
-            side_effect=lambda chunk: {n: {} for n in chunk},
+            "src.run.fetch_all_locations_with_status",
+            side_effect=lambda chunk: LocationFetchResult(
+                results={n: {} for n in chunk}, failed=()
+            ),
         ),
     )
 
@@ -157,6 +213,20 @@ def test_run_batch_slices_municipalities() -> None:
     assert w.call_args_list[1].args[1] == json.dumps({"E": {}}).encode()
 
 
+def test_run_batch_writes_manifests_for_run_id() -> None:
+    """A run ID enables deterministic batch and final manifests."""
+    p1, p2, p3 = _transport_patches(["A"])
+    with p1, p2, p3, patch("src.run.write_raw", return_value="s3://b/k"), patch(
+        "src.run.write_run_manifest"
+    ) as manifest:
+        result = run_batch("transport", 0, 10, run_id="run-1")
+
+    assert result.next_batch is None
+    assert manifest.call_count == 2
+    assert manifest.call_args_list[0].kwargs["part"] == 0
+    assert manifest.call_args_list[1].args[1] == "run-1"
+
+
 def test_run_batch_out_of_range() -> None:
     """A batch beyond the last one is rejected before anything is written"""
     p1, p2, p3 = _transport_patches(["A", "B"])
@@ -173,7 +243,8 @@ def test_transport_downloads_municipalities_if_missing() -> None:
     ) as download, patch(
         "src.run.parse_municipality_names", return_value=["A"]
     ) as parse, patch(
-        "src.run.fetch_all_locations", return_value={"A": {}}
+        "src.run.fetch_all_locations_with_status",
+        return_value=LocationFetchResult(results={"A": {}}, failed=()),
     ), patch(
         "src.run.write_raw", return_value="s3://b/k"
     ):
@@ -205,7 +276,11 @@ def test_handler_batched() -> None:
     with patch("src.run.run_batch", return_value=BatchResult("s3://b/k", 4)) as rb:
         out = handler({"source": "transport", "batch": 3}, None)
 
-    assert out == {"uri": "s3://b/k", "next_batch": 4}
+    assert out == {
+        "uri": "s3://b/k",
+        "next_batch": 4,
+        "failed_municipalities": [],
+    }
     rb.assert_called_once_with("transport", 3, None)
 
 
