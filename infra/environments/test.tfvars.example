@@ -1,6 +1,17 @@
-project_name      = "mscids-dwl"
-environment       = "test"
-aws_region        = "eu-central-1"
-data_bucket_name  = "replace-with-globally-unique-data-bucket"
-state_bucket_name = "replace-with-globally-unique-state-bucket"
-create_state_bucket = false
+project_name                   = "mscids-dwl"
+environment                    = "test"
+aws_region                    = "us-east-1"
+data_bucket_name              = "replace-with-globally-unique-data-bucket"
+state_bucket_name             = "replace-with-globally-unique-state-bucket"
+create_state_bucket           = false
+# Set after pushing an immutable image to ECR:
+# lambda_image_uri             = "123456789012.dkr.ecr.us-east-1.amazonaws.com/mscids-dwl-test-loader:2026-11-19"
+# Immutable reference snapshot used by municipality_weather:
+# municipality_weather_points_uri = "s3://replace-with-globally-unique-data-bucket/reference/municipality_weather/points-v1.csv"
+# Non-secret municipality_weather runtime settings:
+# lambda_environment = {
+#   MUNICIPALITY_WEATHER_API_ENDPOINT = "https://archive-api.open-meteo.com/v1/archive"
+#   MUNICIPALITY_WEATHER_START_DATE   = "2026-11-15"
+#   MUNICIPALITY_WEATHER_END_DATE     = "2026-11-15"
+#   MUNICIPALITY_WEATHER_BATCH_SIZE   = "50"
+# }

@@ -45,3 +45,51 @@ variable "raw_noncurrent_expiration_days" {
   type        = number
   default     = 90
 }
+
+variable "lambda_image_uri" {
+  description = "Fully qualified ECR image URI. Leave null to provision only the ECR repository and IAM resources."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "lambda_architecture" {
+  description = "Lambda instruction set architecture used by the container image."
+  type        = string
+  default     = "arm64"
+  validation {
+    condition     = contains(["arm64", "x86_64"], var.lambda_architecture)
+    error_message = "lambda_architecture must be arm64 or x86_64."
+  }
+}
+
+variable "lambda_memory_size" {
+  description = "Lambda memory in MB."
+  type        = number
+  default     = 1024
+}
+
+variable "lambda_timeout_seconds" {
+  description = "Maximum Lambda execution time."
+  type        = number
+  default     = 900
+}
+
+variable "lambda_log_retention_days" {
+  description = "CloudWatch log retention for the runtime Lambda."
+  type        = number
+  default     = 30
+}
+
+variable "lambda_environment" {
+  description = "Additional non-secret environment variables for the Lambda container. Do not put API tokens here."
+  type        = map(string)
+  default     = {}
+}
+
+variable "municipality_weather_points_uri" {
+  description = "S3 URI of the immutable municipality_weather reference snapshot, for example s3://bucket/reference/municipality_weather/points-v1.csv."
+  type        = string
+  default     = null
+  nullable    = true
+}
