@@ -224,3 +224,12 @@ __marimo__/
 logs/
 # Local test output
 tests/output/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+*.tfvars
+!*.tfvars.example

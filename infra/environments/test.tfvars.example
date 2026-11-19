@@ -1,0 +1,6 @@
+project_name      = "mscids-dwl"
+environment       = "test"
+aws_region        = "eu-central-1"
+data_bucket_name  = "replace-with-globally-unique-data-bucket"
+state_bucket_name = "replace-with-globally-unique-state-bucket"
+create_state_bucket = false

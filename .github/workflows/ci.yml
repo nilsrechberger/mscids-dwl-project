@@ -37,3 +37,24 @@ jobs:
 
       - name: Build Lambda image
         run: docker build -t dwl-loaders .
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.17.2"
+
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive
+
+      - name: Initialize Terraform without backend
+        run: terraform init -backend=false
+
+      - name: Validate Terraform configuration
+        run: terraform validate
