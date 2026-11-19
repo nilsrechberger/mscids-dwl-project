@@ -34,3 +34,21 @@ Downloads the static municipality XLSX file from the BFS (`MUNICIPALITY_XLSX`). 
 [weather.py](weather.py) — `fetch_weather(start_date, end_date) -> dict[str, dict]`
 
 Fetches hourly `temperature_2m` and `rain` from the Open-Meteo archive API (`WEATHER_API_ENDPOINT`) for all 26 cantons in one request. The static `CANTONS` dict holds the coordinates of each cantonal capital. The result is `{canton code: response}`. The default range is 2026-09-14 to 2026-09-28.
+
+## Source contract status
+
+The canonical source registry is defined in `src/sources.py` and is used by `src.run` to validate local and Lambda invocations.
+
+Production sources for the municipality pipeline are currently:
+
+- `istdaten_v2`: primary daily transport source, streamed as unchanged CSV.
+- `municipality`: BFS municipality reference source.
+- `municipality_weather`: batched Open-Meteo archive responses for the versioned municipality point snapshot.
+
+The following loaders remain available for compatibility or baseline comparisons, but are not the primary municipality-analysis sources yet:
+
+- `weather`: canton-capital weather baseline.
+- `transport`: legacy location-search API, loaded in batches.
+- `gtfs_rt`: legacy realtime feed.
+
+The municipality-level weather loader reads `MUNICIPALITY_WEATHER_POINTS`, requests up to `MUNICIPALITY_WEATHER_BATCH_SIZE` locations per API call, and stores an envelope containing the request points and raw API response. The existing canton-level `weather` source remains a separate baseline and must not be used as a substitute for municipality weather.

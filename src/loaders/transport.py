@@ -2,6 +2,7 @@
 
 import logging
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 import requests
 
@@ -9,6 +10,14 @@ from src.config import config
 from src.http import get_session
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class LocationFetchResult:
+    """Results and explicit failures from one municipality batch."""
+
+    results: dict[str, dict]
+    failed: tuple[str, ...]
 
 
 def fetch_locations(
@@ -32,38 +41,43 @@ def fetch_locations(
             timeout=10,
         )
         response.raise_for_status()
-    except requests.exceptions.RequestException as e:
-        logger.error("%s", e)
+    except requests.exceptions.RequestException as error:
+        logger.error("Transport request failed for %s: %s", query, error)
         raise
     return response.json()
 
 
-def fetch_all_locations(municipalities: Iterable[str]) -> dict[str, dict]:
-    """
-    Fetch transport locations for every given municipality
-
-    A failing municipality is logged and skipped, so one bad request does not
-    abort the whole run. If every request fails the error is raised.
-
-    Args:
-        municipalities: Municipality names to search for
-
-    Returns:
-        dict[str, dict]: Municipality name -> API response
-    """
+def fetch_all_locations_with_status(
+    municipalities: Iterable[str],
+) -> LocationFetchResult:
+    """Fetch a batch and return successful and failed municipality names."""
     session = get_session()
     results: dict[str, dict] = {}
     failed: list[str] = []
-    last_error: requests.exceptions.RequestException | None = None
     for name in municipalities:
         try:
             results[name] = fetch_locations(name, session=session)
-        except requests.exceptions.RequestException as e:
+        except requests.exceptions.RequestException:
             failed.append(name)
-            last_error = e
+
     if failed:
-        logger.warning("%d municipalities failed: %s", len(failed), failed[:20])
-        if not results and last_error:
-            raise last_error
-    logger.info("Fetched locations for %d municipalities", len(results))
-    return results
+        logger.warning(
+            "Transport batch completed with %d failed municipalities: %s",
+            len(failed),
+            failed[:20],
+        )
+    logger.info(
+        "Fetched locations for %d municipalities; failed=%d",
+        len(results),
+        len(failed),
+    )
+    if not results and failed:
+        raise requests.exceptions.RequestException(
+            f"All {len(failed)} municipality requests failed"
+        )
+    return LocationFetchResult(results=results, failed=tuple(failed))
+
+
+def fetch_all_locations(municipalities: Iterable[str]) -> dict[str, dict]:
+    """Backward-compatible wrapper returning only successful responses."""
+    return fetch_all_locations_with_status(municipalities).results

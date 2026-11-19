@@ -13,6 +13,7 @@ so a Step Functions loop or a script can walk through all batches. Locally,
 import json
 import logging
 import sys
+from datetime import datetime, timezone
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
@@ -21,10 +22,18 @@ from src.config import config
 from src.loaders.gtfs_rt import fetch_gtfs_rt
 from src.loaders.istdaten_v2 import fetch_istdaten_v2
 from src.loaders.municipality import fetch_municipality, parse_municipality_names
-from src.loaders.transport import fetch_all_locations
+from src.loaders.municipality_weather import fetch_batch, load_weather_points
+from src.loaders.transport import fetch_all_locations_with_status
 from src.loaders.weather import fetch_weather
 from src.log import setup_logging
-from src.storage import read_latest_raw, write_raw, write_raw_stream
+from src.sources import ALL_SOURCES, require_source
+from src.storage import (
+    read_latest_raw,
+    write_raw,
+    write_raw_stream,
+    write_run_manifest,
+)
+from src.runs import validate_run_context
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +48,7 @@ class BatchResult:
 
     uri: str
     next_batch: int | None
+    failed_municipalities: tuple[str, ...] = ()
 
 
 def _municipality_names() -> list[str]:
@@ -56,12 +66,35 @@ def _municipality_names() -> list[str]:
     return parse_municipality_names(content)
 
 
-def _fetch_transport_batch(batch: int, batch_size: int) -> tuple[dict, int]:
+def _fetch_transport_batch(
+    batch: int, batch_size: int
+) -> tuple[dict, int, tuple[str, ...]]:
     """Fetch one slice of the municipality list, returns (data, total batches)"""
     names = _municipality_names()
     total = -(-len(names) // batch_size)
     start = batch * batch_size
-    return fetch_all_locations(names[start : start + batch_size]), total
+    result = fetch_all_locations_with_status(names[start : start + batch_size])
+    return result.results, total, result.failed
+
+
+def _fetch_municipality_weather_batch(
+    batch: int, batch_size: int
+) -> tuple[dict, int, tuple[str, ...]]:
+    """Fetch one raw Open-Meteo batch for the configured point snapshot."""
+    points = load_weather_points(config.MUNICIPALITY_WEATHER_POINTS or "")
+    if (
+        not config.MUNICIPALITY_WEATHER_START_DATE
+        or not config.MUNICIPALITY_WEATHER_END_DATE
+    ):
+        raise RuntimeError("MUNICIPALITY_WEATHER_START_DATE and _END_DATE must be set")
+    total = -(-len(points) // batch_size)
+    start = batch * batch_size
+    payload = fetch_batch(
+        points[start : start + batch_size],
+        config.MUNICIPALITY_WEATHER_START_DATE,
+        config.MUNICIPALITY_WEATHER_END_DATE,
+    )
+    return payload, total, ()
 
 
 # source name -> function returning (file content, file extension)
@@ -77,13 +110,18 @@ STREAM_LOADERS = {"istdaten_v2": fetch_istdaten_v2}
 
 
 # sources loaded in several invocations: name -> function(batch, batch_size)
-BATCHED_LOADERS: dict[str, Callable[[int, int], tuple[dict, int]]] = {
+BATCHED_LOADERS: dict[str, Callable[[int, int], tuple[dict, int, tuple[str, ...]]]] = {
     "transport": _fetch_transport_batch,
+    "municipality_weather": _fetch_municipality_weather_batch,
 }
 
 
 def run_batch(
-    source: str, batch: int = 0, batch_size: int | None = None
+    source: str,
+    batch: int = 0,
+    batch_size: int | None = None,
+    run_id: str | None = None,
+    observation_date: str | None = None,
 ) -> BatchResult:
     """
     Fetch one batch of a batched source and write it to S3
@@ -102,11 +140,26 @@ def run_batch(
     if batch < 0 or size < 1:
         raise ValueError("batch must be >= 0 and batch_size >= 1")
 
-    data, total = BATCHED_LOADERS[source](batch, size)
+    data, total, failed = BATCHED_LOADERS[source](batch, size)
     if batch >= total:
         raise ValueError(f"Batch {batch} out of range, {source} has {total} batches")
     payload = _json_bytes(data)
-    uri = write_raw(source, payload, "json", part=batch)
+    run_datetime = (
+        datetime.fromisoformat(observation_date).replace(tzinfo=timezone.utc)
+        if observation_date
+        else None
+    )
+    if run_id is None:
+        uri = write_raw(source, payload, "json", part=batch)
+    else:
+        uri = write_raw(
+            source,
+            payload,
+            "json",
+            part=batch,
+            run_id=run_id,
+            now=run_datetime,
+        )
     logger.info(
         "Loaded %s batch %d/%d: %d bytes -> %s",
         source,
@@ -115,10 +168,39 @@ def run_batch(
         len(payload),
         uri,
     )
-    return BatchResult(uri, batch + 1 if batch + 1 < total else None)
+    if run_id is not None:
+        request = data.get("request") if isinstance(data, dict) else None
+        items = request.get("points") if isinstance(request, dict) else None
+        metadata = {
+            "batch": batch,
+            "batch_count": total,
+            "completed_batches": batch + 1,
+            "failed_batches": [batch] if failed else [],
+            "failed_municipalities": list(failed),
+            "items_in_batch": len(items) if isinstance(items, list) else len(data),
+            "status": "partial" if failed else "completed",
+        }
+        write_run_manifest(source, run_id, metadata, now=run_datetime, part=batch)
+        if batch + 1 == total:
+            write_run_manifest(
+                source,
+                run_id,
+                {
+                    **metadata,
+                    "status": "completed_with_failures" if failed else "completed",
+                },
+                now=run_datetime,
+            )
+    return BatchResult(
+        uri,
+        batch + 1 if batch + 1 < total else None,
+        failed_municipalities=failed,
+    )
 
 
-def run(source: str) -> str:
+def run(
+    source: str, run_id: str | None = None, observation_date: str | None = None
+) -> str:
     """
     Fetch one source and write the raw result to S3
 
@@ -128,27 +210,50 @@ def run(source: str) -> str:
     Returns:
         str: S3 URI of the written object
     """
+    require_source(source)
     if source in BATCHED_LOADERS:
         # all batches in sequence, for local runs
-        result = run_batch(source)
+        result = run_batch(source, run_id=run_id, observation_date=observation_date)
         while result.next_batch is not None:
-            result = run_batch(source, result.next_batch)
+            result = run_batch(
+                source,
+                result.next_batch,
+                run_id=run_id,
+                observation_date=observation_date,
+            )
         return result.uri
     if source in STREAM_LOADERS:
         response = STREAM_LOADERS[source]()
         try:
-            uri = write_raw_stream(source, cast(Any, response.raw), "csv")
+            run_datetime = (
+                datetime.fromisoformat(observation_date).replace(tzinfo=timezone.utc)
+                if observation_date
+                else None
+            )
+            if run_id is None:
+                uri = write_raw_stream(source, cast(Any, response.raw), "csv")
+            else:
+                uri = write_raw_stream(
+                    source,
+                    cast(Any, response.raw),
+                    "csv",
+                    run_id=run_id,
+                    now=run_datetime,
+                )
         finally:
             response.close()
         logger.info("Loaded %s as stream -> %s", source, uri)
         return uri
-    if source not in LOADERS:
-        raise ValueError(
-            f"Unknown source '{source}', choose from {sorted([*LOADERS, *BATCHED_LOADERS, *STREAM_LOADERS])}"
-        )
-
     data, extension = LOADERS[source]()
-    uri = write_raw(source, data, extension)
+    if run_id is None:
+        uri = write_raw(source, data, extension)
+    else:
+        run_datetime = (
+            datetime.fromisoformat(observation_date).replace(tzinfo=timezone.utc)
+            if observation_date
+            else None
+        )
+        uri = write_raw(source, data, extension, run_id=run_id, now=run_datetime)
     logger.info("Loaded %s: %d bytes -> %s", source, len(data), uri)
     return uri
 
@@ -161,17 +266,44 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     "batch" (default 0) and "batch_size", and return "next_batch".
     """
     logging.getLogger().setLevel(logging.INFO)
-    source = event["source"]
+    source = event.get("source")
+    if not isinstance(source, str):
+        raise ValueError(
+            f"Event must contain a string 'source'; choose from {ALL_SOURCES}"
+        )
+    require_source(source)
+    validate_run_context(event, source)
     if source in BATCHED_LOADERS:
-        result = run_batch(source, int(event.get("batch", 0)), event.get("batch_size"))
-        return {"uri": result.uri, "next_batch": result.next_batch}
-    return {"uri": run(source)}
+        if event.get("run_id") is None:
+            result = run_batch(
+                source, int(event.get("batch", 0)), event.get("batch_size")
+            )
+        else:
+            result = run_batch(
+                source,
+                int(event.get("batch", 0)),
+                event.get("batch_size"),
+                event["run_id"],
+                event.get("observation_date"),
+            )
+        return {
+            "uri": result.uri,
+            "next_batch": result.next_batch,
+            "failed_municipalities": list(result.failed_municipalities),
+        }
+    if event.get("run_id") is None:
+        return {"uri": run(source)}
+    return {
+        "uri": run(
+            source,
+            event["run_id"],
+            event.get("observation_date"),
+        )
+    }
 
 
 if __name__ == "__main__":
     setup_logging()
     if len(sys.argv) != 2:
-        sys.exit(
-            f"Usage: python -m src.run <{'|'.join(sorted([*LOADERS, *BATCHED_LOADERS, *STREAM_LOADERS]))}>"
-        )
+        sys.exit(f"Usage: python -m src.run <{'|'.join(ALL_SOURCES)}>")
     run(sys.argv[1])
