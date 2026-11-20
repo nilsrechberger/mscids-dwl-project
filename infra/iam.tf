@@ -25,6 +25,7 @@ data "aws_iam_policy_document" "loader_s3" {
     resources = [
       "${aws_s3_bucket.data_lake.arn}/reference/*",
       "${aws_s3_bucket.data_lake.arn}/raw/municipality/*",
+      "${aws_s3_bucket.data_lake.arn}/raw/municipality_weather/*",
     ]
   }
 
