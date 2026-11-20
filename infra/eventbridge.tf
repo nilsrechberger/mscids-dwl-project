@@ -41,7 +41,7 @@ resource "aws_cloudwatch_event_rule" "daily_istdaten_v2" {
   name                = "${local.eventbridge_schedule_name_prefix}-istdaten-v2"
   description         = "Daily official Ist-Daten-v2 ingestion."
   schedule_expression = var.eventbridge_schedule_expression
-  is_enabled          = true
+  state               = "ENABLED"
 }
 
 resource "aws_cloudwatch_event_target" "daily_istdaten_v2" {
@@ -70,7 +70,7 @@ resource "aws_cloudwatch_event_rule" "daily_municipality_weather" {
   name                = "${local.eventbridge_schedule_name_prefix}-municipality-weather"
   description         = "Daily municipality weather Step Functions run."
   schedule_expression = var.eventbridge_schedule_expression
-  is_enabled          = true
+  state               = "ENABLED"
 }
 
 resource "aws_cloudwatch_event_target" "daily_municipality_weather" {
