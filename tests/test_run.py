@@ -213,6 +213,27 @@ def test_run_batch_slices_municipalities() -> None:
     assert w.call_args_list[1].args[1] == json.dumps({"E": {}}).encode()
 
 
+def test_weather_batch_receives_observation_date() -> None:
+    """Scheduled weather runs pass their derived date to the loader."""
+    payload = {"request": {"points": [{"gdenr": "1"}]}, "response": []}
+    with patch(
+        "src.run._fetch_municipality_weather_batch",
+        return_value=(payload, 1, ()),
+    ) as fetch, patch("src.run.write_raw", return_value="s3://b/k"), patch(
+        "src.run.write_run_manifest"
+    ):
+        result = run_batch(
+            "municipality_weather",
+            0,
+            50,
+            run_id="weather-run",
+            observation_date="2026-11-20",
+        )
+
+    assert result.next_batch is None
+    fetch.assert_called_once_with(0, 50, "2026-11-20")
+
+
 def test_run_batch_writes_manifests_for_run_id() -> None:
     """A run ID enables deterministic batch and final manifests."""
     p1, p2, p3 = _transport_patches(["A"])
@@ -300,6 +321,32 @@ def test_handler() -> None:
         assert handler({"source": "weather"}, None) == {"uri": "s3://b/k"}
 
     run_mock.assert_called_once_with("weather")
+
+
+def test_handler_prepares_previous_day_weather_run() -> None:
+    """Daily preparation selects the completed UTC day and a stable run ID."""
+    result = handler(
+        {
+            "action": "prepare_daily",
+            "source": "municipality_weather",
+            "execution_id": "daily-execution",
+            "execution_start_date": "2026-11-20",
+            "point_snapshot": "points-v1",
+            "batch": 0,
+            "batch_size": 50,
+        },
+        None,
+    )
+
+    assert result == {
+        "source": "municipality_weather",
+        "run_id": "municipality-weather-2026-11-19-points-v1",
+        "execution_id": "daily-execution",
+        "observation_date": "2026-11-19",
+        "point_snapshot": "points-v1",
+        "batch": 0,
+        "batch_size": 50,
+    }
 
 
 def test_handler_finalizes_manifest() -> None:
