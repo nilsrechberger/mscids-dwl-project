@@ -14,4 +14,6 @@ create_state_bucket           = false
 #   MUNICIPALITY_WEATHER_START_DATE   = "2026-11-15"
 #   MUNICIPALITY_WEATHER_END_DATE     = "2026-11-15"
 #   MUNICIPALITY_WEATHER_BATCH_SIZE   = "50"
+#   MUNICIPALITY_XLSX                 = "https://www.agvchapp.bfs.admin.ch/de/state/results/xls?SnapshotDate=01.01.2026"
+#   ISTDATEN_V2_ENDPOINT              = "https://data.opentransportdata.swiss/dataset/ist-daten-v2/permalink"
 # }

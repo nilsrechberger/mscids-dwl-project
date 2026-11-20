@@ -21,8 +21,17 @@ The execution role is intentionally limited to CloudWatch logging and the existi
 
 The `municipality_weather` loader accepts both local paths and an immutable `s3://bucket/key` CSV URI. Configure `municipality_weather_points_uri` with the versioned object under `reference/`. The `point_snapshot` field in the run event is retained in the final manifest for lineage and is validated as part of the run contract.
 
-## Deployment sequence
 
+The Lambda also requires these non-secret public endpoints in `lambda_environment`:
+
+```hcl
+MUNICIPALITY_XLSX    = "https://www.agvchapp.bfs.admin.ch/de/state/results/xls?SnapshotDate=01.01.2026"
+ISTDATEN_V2_ENDPOINT = "https://data.opentransportdata.swiss/dataset/ist-daten-v2/permalink"
+```
+
+API tokens and other secrets must not be committed; use Secrets Manager or SSM for those values.
+
+## Deployment sequence
 1. Apply the existing bootstrap/state configuration with `lambda_image_uri = null` if the ECR repository does not exist yet.
 2. Build and push an immutable image. The repository URL is available as `loader_ecr_repository_url`:
 
