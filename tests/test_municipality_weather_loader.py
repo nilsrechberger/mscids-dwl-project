@@ -28,6 +28,22 @@ def test_load_weather_points_requires_contract(tmp_path: Path) -> None:
     assert result[0]["gdenr"] == "1"
 
 
+def test_load_weather_points_reads_s3_snapshot() -> None:
+    client = MagicMock()
+    client.get_object.return_value = {
+        "Body": MagicMock(
+            read=lambda: b"gdenr,gdename,latitude,longitude\n1,Aeugst,47.27,8.48\n"
+        )
+    }
+    with patch("src.loaders.municipality_weather.boto3.client", return_value=client):
+        result = load_weather_points("s3://data-bucket/reference/points-v1.csv")
+
+    assert result == [POINTS[0]]
+    client.get_object.assert_called_once_with(
+        Bucket="data-bucket", Key="reference/points-v1.csv"
+    )
+
+
 def test_load_weather_points_rejects_missing_columns(tmp_path: Path) -> None:
     points = tmp_path / "points.csv"
     points.write_text("gdenr,gdename\n1,Aeugst\n", encoding="utf-8")

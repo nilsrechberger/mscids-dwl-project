@@ -149,7 +149,7 @@ python -m scripts.smoke_test_run_contract \
 
 The scripts under `scripts/` are intentionally local spike tooling. Large source files, downloaded GTFS archives, GeoJSON boundaries and generated outputs belong under `.work/` and must not be committed.
 
-The intended workflow is to finish and validate the local pipeline first, commit and push it for peer review, and only then adapt Terraform, S3 buckets, scheduling and the production Lambda integration. Generated source files and outputs belong under `.work/` and must not be committed.
+The local pipeline is now complemented by the AWS runtime work on `feat/aws-runtime-orchestration`: Terraform provisions the ECR repository, Lambda execution role, optional Lambda image function, and a Step Functions batch loop with deterministic manifest finalization. EventBridge scheduling remains a later step. Generated source files and outputs belong under `.work/` and must not be committed.
 
 ## Setup
 

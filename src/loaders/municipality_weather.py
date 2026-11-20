@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import csv
+import io
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 from urllib.parse import urlencode
 
+import boto3
 import requests
 
 from src.config import config
@@ -26,7 +28,17 @@ def load_weather_points(path: str | Path) -> list[dict[str, str]]:
     """Load a versioned municipality weather-point CSV."""
     if not path:
         raise RuntimeError("MUNICIPALITY_WEATHER_POINTS is not set")
-    with Path(path).open("r", encoding="utf-8-sig", newline="") as handle:
+    path_value = str(path)
+    handle: TextIO
+    if path_value.startswith("s3://"):
+        bucket, _, key = path_value[5:].partition("/")
+        if not bucket or not key:
+            raise ValueError("S3 weather-point snapshot must be s3://bucket/key")
+        body = boto3.client("s3").get_object(Bucket=bucket, Key=key)["Body"].read()
+        handle = io.StringIO(body.decode("utf-8-sig"), newline="")
+    else:
+        handle = Path(path).open("r", encoding="utf-8-sig", newline="")
+    with handle:
         points = list(csv.DictReader(handle))
     required = {"gdenr", "gdename", "latitude", "longitude"}
     missing = required.difference(points[0] if points else set())

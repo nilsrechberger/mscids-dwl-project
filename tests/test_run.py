@@ -300,3 +300,27 @@ def test_handler() -> None:
         assert handler({"source": "weather"}, None) == {"uri": "s3://b/k"}
 
     run_mock.assert_called_once_with("weather")
+
+
+def test_handler_finalizes_manifest() -> None:
+    """The orchestration action delegates final manifest creation."""
+    summary = {"status": "completed", "source": "transport"}
+    with patch("src.run.finalize_run", return_value=summary) as finalize:
+        result = handler(
+            {
+                "action": "finalize",
+                "source": "transport",
+                "run_id": "run-1",
+                "observation_date": "2026-10-02",
+                "execution_id": "execution-1",
+            },
+            None,
+        )
+
+    assert result == summary
+    finalize.assert_called_once_with(
+        "transport",
+        "run-1",
+        "2026-10-02",
+        metadata={"execution_id": "execution-1"},
+    )

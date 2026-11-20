@@ -33,7 +33,7 @@ from src.storage import (
     write_raw_stream,
     write_run_manifest,
 )
-from src.runs import validate_run_context
+from src.runs import finalize_run, validate_run_context
 
 logger = logging.getLogger(__name__)
 
@@ -264,8 +264,42 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     Event: {"source": "<loader name>"}. Batched sources also accept
     "batch" (default 0) and "batch_size", and return "next_batch".
+    The orchestration state machine uses ``action=finalize`` after the last
+    batch to aggregate deterministic S3 manifests.
     """
     logging.getLogger().setLevel(logging.INFO)
+    if event.get("action") == "finalize":
+        source = event.get("source")
+        run_id = event.get("run_id")
+        observation_date = event.get("observation_date")
+        if not all(
+            isinstance(value, str) and value
+            for value in (source, run_id, observation_date)
+        ):
+            raise ValueError(
+                "finalize event requires source, run_id and observation_date"
+            )
+        assert isinstance(source, str)
+        assert isinstance(run_id, str)
+        assert isinstance(observation_date, str)
+        require_source(source)
+        validate_run_context(
+            {
+                **event,
+                "execution_id": event.get("execution_id", "step-functions"),
+            },
+            source,
+        )
+        return finalize_run(
+            source,
+            run_id,
+            observation_date,
+            metadata={
+                key: event[key]
+                for key in ("execution_id", "point_snapshot")
+                if event.get(key) is not None
+            },
+        )
     source = event.get("source")
     if not isinstance(source, str):
         raise ValueError(

@@ -22,3 +22,23 @@ output "terraform_state_bucket_name" {
   description = "Optional Terraform state bucket name when state bucket creation is enabled."
   value       = var.create_state_bucket ? aws_s3_bucket.terraform_state[0].bucket : null
 }
+
+output "loader_ecr_repository_url" {
+  description = "ECR repository URL for the Lambda container image."
+  value       = aws_ecr_repository.loader.repository_url
+}
+
+output "loader_lambda_function_name" {
+  description = "Lambda function name when an image URI is configured."
+  value       = try(aws_lambda_function.loader[0].function_name, null)
+}
+
+output "loader_lambda_function_arn" {
+  description = "Lambda function ARN when an image URI is configured."
+  value       = try(aws_lambda_function.loader[0].arn, null)
+}
+
+output "loader_state_machine_arn" {
+  description = "Step Functions state machine ARN when an image URI is configured."
+  value       = try(aws_sfn_state_machine.loader[0].arn, null)
+}
