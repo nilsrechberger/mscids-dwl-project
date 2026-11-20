@@ -130,8 +130,43 @@ resource "aws_sfn_state_machine" "loader" {
 
   definition = jsonencode({
     Comment = "Loop Lambda batches and finalize the deterministic S3 manifest."
-    StartAt = "InvokeBatch"
+    StartAt = "HasObservationDate"
     States = {
+      HasObservationDate = {
+        Type = "Choice"
+        Choices = [{
+          And = [
+            {
+              Variable  = "$.observation_date"
+              IsPresent = true
+            },
+            {
+              Variable = "$.observation_date"
+              IsNull   = false
+            }
+          ]
+          Next = "InvokeBatch"
+        }]
+        Default = "PrepareDailyInput"
+      }
+      PrepareDailyInput = {
+        Type     = "Task"
+        Resource = "arn:aws:states:::lambda:invoke"
+        Parameters = {
+          FunctionName = aws_lambda_function.loader[0].arn
+          Payload = {
+            action                   = "prepare_daily"
+            "source.$"               = "$.source"
+            "execution_id.$"         = "$$.Execution.Name"
+            "execution_start_date.$" = "States.ArrayGetItem(States.StringSplit($$.Execution.StartTime, 'T'), 0)"
+            "point_snapshot.$"       = "$.point_snapshot"
+            "batch.$"                = "$.batch"
+            "batch_size.$"           = "$.batch_size"
+          }
+        }
+        OutputPath = "$.Payload"
+        Next       = "InvokeBatch"
+      }
       InvokeBatch = {
         Type     = "Task"
         Resource = "arn:aws:states:::lambda:invoke"

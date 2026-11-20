@@ -31,6 +31,12 @@ ISTDATEN_V2_ENDPOINT = "https://data.opentransportdata.swiss/dataset/ist-daten-v
 
 API tokens and other secrets must not be committed; use Secrets Manager or SSM for those values.
 
+## Daily EventBridge preparation
+
+The Terraform configuration contains two daily EventBridge rules for Ist-Daten-v2 and municipality-weather. They are disabled by default with `eventbridge_schedule_enabled = false` and must remain disabled until the schedule has been reviewed in the test environment. The municipality register is a static reference snapshot and is loaded once per snapshot version or manually when the official reference changes; it is not part of the daily schedule.
+
+When a scheduled weather execution omits `observation_date` and `run_id`, the state machine calls the Lambda's `prepare_daily` action. It derives the completed UTC day (the execution date minus one day), creates a deterministic `run_id`, and passes that date to Open-Meteo. Manual executions may continue to provide an explicit run context.
+
 ## Deployment sequence
 1. Apply the existing bootstrap/state configuration with `lambda_image_uri = null` if the ECR repository does not exist yet.
 2. Build and push an immutable image. The repository URL is available as `loader_ecr_repository_url`:
@@ -42,7 +48,7 @@ API tokens and other secrets must not be committed; use Secrets Manager or SSM f
 
 3. Set `lambda_image_uri` to the pushed tag (or digest) and apply again. Terraform then creates the Lambda function, its log group, the execution role, and the Step Functions state machine.
 4. Upload the immutable weather-point snapshot before starting a `municipality_weather` run, for example `reference/municipality_weather/points-v1.csv`.
-5. Start the state machine manually during this phase. EventBridge Scheduler is deliberately not included yet.
+5. Start the state machine manually during this phase. EventBridge remains disabled until its separate plan is reviewed and applied.
 
 ## State-machine input
 

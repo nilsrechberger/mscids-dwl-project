@@ -13,7 +13,7 @@ so a Step Functions loop or a script can walk through all batches. Locally,
 import json
 import logging
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, cast
@@ -78,21 +78,20 @@ def _fetch_transport_batch(
 
 
 def _fetch_municipality_weather_batch(
-    batch: int, batch_size: int
+    batch: int, batch_size: int, observation_date: str | None = None
 ) -> tuple[dict, int, tuple[str, ...]]:
     """Fetch one raw Open-Meteo batch for the configured point snapshot."""
     points = load_weather_points(config.MUNICIPALITY_WEATHER_POINTS or "")
-    if (
-        not config.MUNICIPALITY_WEATHER_START_DATE
-        or not config.MUNICIPALITY_WEATHER_END_DATE
-    ):
+    start_date = observation_date or config.MUNICIPALITY_WEATHER_START_DATE
+    end_date = observation_date or config.MUNICIPALITY_WEATHER_END_DATE
+    if not start_date or not end_date:
         raise RuntimeError("MUNICIPALITY_WEATHER_START_DATE and _END_DATE must be set")
     total = -(-len(points) // batch_size)
     start = batch * batch_size
     payload = fetch_batch(
         points[start : start + batch_size],
-        config.MUNICIPALITY_WEATHER_START_DATE,
-        config.MUNICIPALITY_WEATHER_END_DATE,
+        start_date,
+        end_date,
     )
     return payload, total, ()
 
@@ -140,7 +139,12 @@ def run_batch(
     if batch < 0 or size < 1:
         raise ValueError("batch must be >= 0 and batch_size >= 1")
 
-    data, total, failed = BATCHED_LOADERS[source](batch, size)
+    if source == "municipality_weather":
+        data, total, failed = _fetch_municipality_weather_batch(
+            batch, size, observation_date
+        )
+    else:
+        data, total, failed = BATCHED_LOADERS[source](batch, size)
     if batch >= total:
         raise ValueError(f"Batch {batch} out of range, {source} has {total} batches")
     payload = _json_bytes(data)
@@ -268,32 +272,68 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     batch to aggregate deterministic S3 manifests.
     """
     logging.getLogger().setLevel(logging.INFO)
-    if event.get("action") == "finalize":
+    if event.get("action") == "prepare_daily":
         source = event.get("source")
-        run_id = event.get("run_id")
-        observation_date = event.get("observation_date")
+        point_snapshot = event.get("point_snapshot")
+        execution_id = event.get("execution_id")
+        execution_start_date = event.get("execution_start_date")
+        if source != "municipality_weather":
+            raise ValueError(
+                "prepare_daily currently supports municipality_weather only"
+            )
         if not all(
             isinstance(value, str) and value
-            for value in (source, run_id, observation_date)
+            for value in (
+                point_snapshot,
+                execution_id,
+                execution_start_date,
+            )
+        ):
+            raise ValueError(
+                "prepare_daily requires point_snapshot, execution_id and "
+                "execution_start_date"
+            )
+        assert isinstance(point_snapshot, str)
+        assert isinstance(execution_id, str)
+        assert isinstance(execution_start_date, str)
+        observation_date = (
+            date.fromisoformat(execution_start_date) - timedelta(days=1)
+        ).isoformat()
+        return {
+            "source": source,
+            "run_id": f"municipality-weather-{observation_date}-{point_snapshot}",
+            "execution_id": execution_id,
+            "observation_date": observation_date,
+            "point_snapshot": point_snapshot,
+            "batch": int(event.get("batch", 0)),
+            "batch_size": int(event.get("batch_size", 50)),
+        }
+    if event.get("action") == "finalize":
+        finalize_source = event.get("source")
+        run_id = event.get("run_id")
+        finalize_observation_date = event.get("observation_date")
+        if not all(
+            isinstance(value, str) and value
+            for value in (finalize_source, run_id, finalize_observation_date)
         ):
             raise ValueError(
                 "finalize event requires source, run_id and observation_date"
             )
-        assert isinstance(source, str)
+        assert isinstance(finalize_source, str)
         assert isinstance(run_id, str)
-        assert isinstance(observation_date, str)
-        require_source(source)
+        assert isinstance(finalize_observation_date, str)
+        require_source(finalize_source)
         validate_run_context(
             {
                 **event,
                 "execution_id": event.get("execution_id", "step-functions"),
             },
-            source,
+            finalize_source,
         )
         return finalize_run(
-            source,
+            finalize_source,
             run_id,
-            observation_date,
+            finalize_observation_date,
             metadata={
                 key: event[key]
                 for key in ("execution_id", "point_snapshot")

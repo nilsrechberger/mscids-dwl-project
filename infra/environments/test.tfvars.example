@@ -17,3 +17,6 @@ create_state_bucket           = false
 #   MUNICIPALITY_XLSX                 = "https://www.agvchapp.bfs.admin.ch/de/state/results/xls?SnapshotDate=01.01.2026"
 #   ISTDATEN_V2_ENDPOINT              = "https://data.opentransportdata.swiss/dataset/ist-daten-v2/permalink"
 # }
+# Keep scheduling disabled until the dynamic daily run contract is verified.
+# eventbridge_schedule_enabled    = false
+# eventbridge_schedule_expression = "cron(0 6 * * ? *)"

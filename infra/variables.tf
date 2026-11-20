@@ -93,3 +93,15 @@ variable "municipality_weather_points_uri" {
   default     = null
   nullable    = true
 }
+
+variable "eventbridge_schedule_enabled" {
+  description = "Enable the daily EventBridge schedules. Keep false until the schedule has been reviewed and observed in the test environment."
+  type        = bool
+  default     = false
+}
+
+variable "eventbridge_schedule_expression" {
+  description = "UTC EventBridge schedule expression for the daily ingestion trigger."
+  type        = string
+  default     = "cron(0 6 * * ? *)"
+}
