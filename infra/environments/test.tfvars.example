@@ -20,8 +20,8 @@ create_state_bucket           = false
 # }
 # Secrets Manager secret with the CKAN API key (create it manually, never put the value here):
 # ckan_api_key_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:mscids-dwl/ckan-api-key-AbCdEf"
-# Alarm e-mail (confirm the SNS subscription mail) and monthly budget:
-# alarm_email        = "team@example.com"
+# Alarm e-mails (each address confirms its SNS subscription mail) and monthly budget:
+# alarm_emails       = ["alice@example.com", "bob@example.com"]
 # monthly_budget_usd = 100
 # istdaten_sync_max_concurrency = 2
 # Keep scheduling disabled until the dynamic daily run contract is verified.

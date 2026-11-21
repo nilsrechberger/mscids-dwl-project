@@ -123,15 +123,18 @@ variable "istdaten_sync_max_concurrency" {
   }
 }
 
-variable "alarm_email" {
-  description = "E-mail address for pipeline alarms and budget notifications. Leave null to create the SNS topic without a subscription."
-  type        = string
-  default     = null
-  nullable    = true
+variable "alarm_emails" {
+  description = "E-mail addresses for pipeline alarms and budget notifications (at most 10). Leave empty to create the SNS topic without subscriptions and without a budget."
+  type        = list(string)
+  default     = []
+  validation {
+    condition     = length(var.alarm_emails) <= 10 && alltrue([for email in var.alarm_emails : can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", email))])
+    error_message = "alarm_emails must contain at most 10 valid e-mail addresses."
+  }
 }
 
 variable "monthly_budget_usd" {
-  description = "Monthly AWS cost budget in USD. Notifications go to alarm_email at 80 % actual and 100 % forecasted spend."
+  description = "Monthly AWS cost budget in USD. Notifications go to alarm_emails at 80 % actual and 100 % forecasted spend."
   type        = number
   default     = 100
 }
