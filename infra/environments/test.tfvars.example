@@ -4,6 +4,8 @@ aws_region                    = "us-east-1"
 data_bucket_name              = "replace-with-globally-unique-data-bucket"
 state_bucket_name             = "replace-with-globally-unique-state-bucket"
 create_state_bucket           = false
+# Must match the image platform: x86_64 <-> linux/amd64 (default), arm64 <-> linux/arm64
+# lambda_architecture         = "x86_64"
 # Set after pushing an immutable image to ECR:
 # lambda_image_uri             = "123456789012.dkr.ecr.us-east-1.amazonaws.com/mscids-dwl-test-loader:2026-11-19"
 # Immutable reference snapshot used by municipality_weather:

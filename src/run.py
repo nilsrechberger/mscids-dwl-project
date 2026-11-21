@@ -46,6 +46,13 @@ class BatchResult:
     failed_municipalities: tuple[str, ...] = ()
 
 
+def _run_datetime(observation_date: str | None) -> datetime | None:
+    """Midnight UTC of the observation date, used for the dt= partition."""
+    if not observation_date:
+        return None
+    return datetime.fromisoformat(observation_date).replace(tzinfo=timezone.utc)
+
+
 def _municipality_names() -> list[str]:
     """
     Municipality names from the newest raw file in the data lake
@@ -62,9 +69,14 @@ def _municipality_names() -> list[str]:
 
 
 def _fetch_transport_batch(
-    batch: int, batch_size: int
+    batch: int, batch_size: int, observation_date: str | None = None
 ) -> tuple[dict, int, tuple[str, ...]]:
-    """Fetch one slice of the municipality list, returns (data, total batches)"""
+    """
+    Fetch one slice of the municipality list
+
+    The legacy transport API has no historical mode, so observation_date is
+    accepted for a uniform signature and ignored.
+    """
     names = _municipality_names()
     total = -(-len(names) // batch_size)
     start = batch * batch_size
@@ -99,11 +111,21 @@ LOADERS: dict[str, Callable[[], tuple[bytes, str]]] = {
 }
 
 
-# sources loaded in several invocations: name -> function(batch, batch_size)
-BATCHED_LOADERS: dict[str, Callable[[int, int], tuple[dict, int, tuple[str, ...]]]] = {
+# sources loaded in several invocations:
+# name -> function(batch, batch_size, observation_date) returning
+# (payload, total batches, failed items)
+BatchFetcher = Callable[[int, int, str | None], tuple[dict, int, tuple[str, ...]]]
+BATCHED_LOADERS: dict[str, BatchFetcher] = {
     "transport": _fetch_transport_batch,
     "municipality_weather": _fetch_municipality_weather_batch,
 }
+
+
+def default_batch_size(source: str) -> int:
+    """Configured items per invocation for a batched source."""
+    if source == "municipality_weather":
+        return config.MUNICIPALITY_WEATHER_BATCH_SIZE
+    return config.TRANSPORT_BATCH_SIZE
 
 
 def run_batch(
@@ -119,31 +141,24 @@ def run_batch(
     Args:
         source: Name of the loader, one of BATCHED_LOADERS
         batch: Zero-based batch number
-        batch_size: Items per batch, defaults to config.TRANSPORT_BATCH_SIZE
+        batch_size: Items per batch, defaults to default_batch_size(source)
+        run_id: Deterministic run ID; enables batch and final manifests
+        observation_date: Day to load (YYYY-MM-DD), also used for dt=
 
     Returns:
         BatchResult: S3 URI and the next batch number (None after the last)
     """
     if source not in BATCHED_LOADERS:
         raise ValueError(f"'{source}' is not a batched source")
-    size = batch_size or config.TRANSPORT_BATCH_SIZE
+    size = batch_size or default_batch_size(source)
     if batch < 0 or size < 1:
         raise ValueError("batch must be >= 0 and batch_size >= 1")
 
-    if source == "municipality_weather":
-        data, total, failed = _fetch_municipality_weather_batch(
-            batch, size, observation_date
-        )
-    else:
-        data, total, failed = BATCHED_LOADERS[source](batch, size)
+    data, total, failed = BATCHED_LOADERS[source](batch, size, observation_date)
     if batch >= total:
         raise ValueError(f"Batch {batch} out of range, {source} has {total} batches")
     payload = _json_bytes(data)
-    run_datetime = (
-        datetime.fromisoformat(observation_date).replace(tzinfo=timezone.utc)
-        if observation_date
-        else None
-    )
+    run_datetime = _run_datetime(observation_date)
     if run_id is None:
         uri = write_raw(source, payload, "json", part=batch)
     else:
@@ -224,12 +239,13 @@ def run(
     if run_id is None:
         uri = write_raw(source, data, extension)
     else:
-        run_datetime = (
-            datetime.fromisoformat(observation_date).replace(tzinfo=timezone.utc)
-            if observation_date
-            else None
+        uri = write_raw(
+            source,
+            data,
+            extension,
+            run_id=run_id,
+            now=_run_datetime(observation_date),
         )
-        uri = write_raw(source, data, extension, run_id=run_id, now=run_datetime)
     logger.info("Loaded %s: %d bytes -> %s", source, len(data), uri)
     return uri
 
@@ -292,7 +308,9 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             "observation_date": observation_date,
             "point_snapshot": point_snapshot,
             "batch": int(event.get("batch", 0)),
-            "batch_size": int(event.get("batch_size", 50)),
+            "batch_size": int(
+                event.get("batch_size", config.MUNICIPALITY_WEATHER_BATCH_SIZE)
+            ),
         }
     if event.get("action") == "finalize":
         finalize_source = event.get("source")

@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 import json
-import re
 from datetime import date, datetime, timezone
 from typing import Any
 
 import boto3
 
 from src.config import config
-from src.storage import write_run_manifest
-
-_RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+from src.storage import RUN_ID_PATTERN, write_run_manifest
 
 
 def validate_run_context(event: dict[str, Any], source: str) -> None:
@@ -20,7 +17,7 @@ def validate_run_context(event: dict[str, Any], source: str) -> None:
     run_id = event.get("run_id")
     if run_id is None:
         return
-    if not isinstance(run_id, str) or not _RUN_ID_PATTERN.fullmatch(run_id):
+    if not isinstance(run_id, str) or not RUN_ID_PATTERN.fullmatch(run_id):
         raise ValueError("run_id must contain 1-64 safe identifier characters")
     for field in ("observation_date", "execution_id"):
         value = event.get(field)

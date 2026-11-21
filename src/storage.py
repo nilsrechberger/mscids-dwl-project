@@ -3,17 +3,18 @@
 from datetime import datetime, timezone
 import json
 import re
-from typing import Any, BinaryIO
+from typing import Any
 
 import boto3
 
 from src.config import config
 
-_RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+# Shared by src.runs for event validation
+RUN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
 def _validate_run_id(run_id: str) -> None:
-    if not _RUN_ID_PATTERN.fullmatch(run_id):
+    if not RUN_ID_PATTERN.fullmatch(run_id):
         raise ValueError(
             "run_id must contain 1-64 letters, numbers, dots, underscores or hyphens"
         )
@@ -54,23 +55,6 @@ def write_raw(
 
     key = build_key(source, extension, now=now, part=part, run_id=run_id)
     boto3.client("s3").put_object(Bucket=config.S3_BUCKET, Key=key, Body=data)
-    return f"s3://{config.S3_BUCKET}/{key}"
-
-
-def write_raw_stream(
-    source: str,
-    stream: BinaryIO,
-    extension: str,
-    part: int | None = None,
-    run_id: str | None = None,
-    now: datetime | None = None,
-) -> str:
-    """Upload a raw stream without materializing it in Lambda memory."""
-    if not config.S3_BUCKET:
-        raise RuntimeError("S3_BUCKET is not set")
-
-    key = build_key(source, extension, now=now, part=part, run_id=run_id)
-    boto3.client("s3").upload_fileobj(stream, config.S3_BUCKET, key)
     return f"s3://{config.S3_BUCKET}/{key}"
 
 
