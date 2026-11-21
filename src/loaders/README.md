@@ -4,9 +4,11 @@ Each loader fetches raw data from one external source. Endpoints and tokens come
 
 ## Ist-Daten v2
 
-[istdaten_v2.py](istdaten_v2.py) — `fetch_istdaten_v2() -> requests.Response`
+[istdaten_v2.py](istdaten_v2.py) — `list_istdaten_resources() -> list[IstdatenResource]`, `find_resource(day)`, `open_resource_stream(resource) -> requests.Response`
 
-Streams the official daily Ist-Daten v2 CSV from `ISTDATEN_V2_ENDPOINT`. The response stream is uploaded unchanged to `raw/istdaten_v2/` so the large CSV is not materialized in Lambda memory. Column normalization and delay-quality flags belong to later Silver processing.
+Lists the daily Ist-Daten v2 CSVs through the opentransportdata.swiss CKAN API (`ISTDATEN_V2_CKAN_ENDPOINT/package_show?id=ist-daten-v2`, header `Authorization: Bearer <key>`). The catalogue holds a rolling window of about 50 operating days; each entry has the operating day in its file name, a content hash, the size and timestamps. The listing needs `CKAN_API_KEY` locally or `CKAN_API_KEY_SECRET_ID` (Secrets Manager) in Lambda; the downloads themselves are public, so the key is not sent with them.
+
+[../istdaten_sync.py](../istdaten_sync.py) compares the catalogue with the manifests in S3 and loads every day that is missing or whose file the provider replaced. Each version is streamed unchanged to `raw/istdaten_v2/dt=<operating day>/run=istdaten-v2-<day>-<hash12>/data.csv`; the `manifest.json` next to it records bytes, MD5, CSV header and the CKAN metadata and is written only after a complete upload. Column normalization and delay-quality flags belong to later Silver processing; Silver uses the newest run per operating day.
 
 ## GTFS-RT
 
@@ -41,7 +43,7 @@ The canonical source registry is defined in `src/sources.py` and is used by `src
 
 Production sources for the municipality pipeline are currently:
 
-- `istdaten_v2`: primary daily transport source, streamed as unchanged CSV.
+- `istdaten_v2`: primary daily transport source, synced from the CKAN catalogue and stored as unchanged CSV per operating day.
 - `municipality`: BFS municipality reference source.
 - `municipality_weather`: batched Open-Meteo archive responses for the versioned municipality point snapshot.
 

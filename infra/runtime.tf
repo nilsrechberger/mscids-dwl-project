@@ -56,8 +56,29 @@ locals {
     },
     var.municipality_weather_points_uri == null ? {} : {
       MUNICIPALITY_WEATHER_POINTS = var.municipality_weather_points_uri
+    },
+    var.ckan_api_key_secret_arn == null ? {} : {
+      CKAN_API_KEY_SECRET_ID = var.ckan_api_key_secret_arn
     }
   )
+}
+
+data "aws_iam_policy_document" "lambda_read_ckan_secret" {
+  count = var.ckan_api_key_secret_arn == null ? 0 : 1
+
+  statement {
+    sid       = "ReadCkanApiKey"
+    effect    = "Allow"
+    actions   = ["secretsmanager:GetSecretValue"]
+    resources = [var.ckan_api_key_secret_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_read_ckan_secret" {
+  count  = var.ckan_api_key_secret_arn == null ? 0 : 1
+  name   = "read-ckan-api-key"
+  role   = aws_iam_role.lambda_runtime.id
+  policy = data.aws_iam_policy_document.lambda_read_ckan_secret[0].json
 }
 
 resource "aws_lambda_function" "loader" {

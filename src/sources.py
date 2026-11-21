@@ -23,7 +23,7 @@ SOURCE_CONTRACTS: dict[str, SourceContract] = {
         kind="stream",
         extension="csv",
         production=True,
-        description="Official daily Ist-Daten v2 CSV",
+        description="Official daily Ist-Daten v2 CSVs, synced from the CKAN catalogue",
     ),
     "municipality": SourceContract(
         name="municipality",

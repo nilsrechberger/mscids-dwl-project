@@ -15,8 +15,13 @@ create_state_bucket           = false
 #   MUNICIPALITY_WEATHER_END_DATE     = "2026-11-15"
 #   MUNICIPALITY_WEATHER_BATCH_SIZE   = "50"
 #   MUNICIPALITY_XLSX                 = "https://www.agvchapp.bfs.admin.ch/de/state/results/xls?SnapshotDate=01.01.2026"
-#   ISTDATEN_V2_ENDPOINT              = "https://data.opentransportdata.swiss/dataset/ist-daten-v2/permalink"
 # }
+# Secrets Manager secret with the CKAN API key (create it manually, never put the value here):
+# ckan_api_key_secret_arn = "arn:aws:secretsmanager:us-east-1:123456789012:secret:mscids-dwl/ckan-api-key-AbCdEf"
+# Alarm e-mail (confirm the SNS subscription mail) and monthly budget:
+# alarm_email        = "team@example.com"
+# monthly_budget_usd = 100
+# istdaten_sync_max_concurrency = 2
 # Keep scheduling disabled until the dynamic daily run contract is verified.
 # eventbridge_schedule_enabled    = false
 # eventbridge_schedule_expression = "cron(0 6 * * ? *)"

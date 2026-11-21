@@ -16,23 +16,18 @@ import sys
 from datetime import date, datetime, timedelta, timezone
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import Any
 
 from src.config import config
 from src.loaders.gtfs_rt import fetch_gtfs_rt
-from src.loaders.istdaten_v2 import fetch_istdaten_v2
 from src.loaders.municipality import fetch_municipality, parse_municipality_names
 from src.loaders.municipality_weather import fetch_batch, load_weather_points
 from src.loaders.transport import fetch_all_locations_with_status
 from src.loaders.weather import fetch_weather
 from src.log import setup_logging
 from src.sources import ALL_SOURCES, require_source
-from src.storage import (
-    read_latest_raw,
-    write_raw,
-    write_raw_stream,
-    write_run_manifest,
-)
+from src.istdaten_sync import load_latest, load_operating_day, plan_sync
+from src.storage import read_latest_raw, write_raw, write_run_manifest
 from src.runs import finalize_run, validate_run_context
 
 logger = logging.getLogger(__name__)
@@ -102,10 +97,6 @@ LOADERS: dict[str, Callable[[], tuple[bytes, str]]] = {
     "gtfs_rt": lambda: (_json_bytes(fetch_gtfs_rt()), "json"),
     "municipality": lambda: (fetch_municipality().content, "xlsx"),
 }
-
-
-# Large sources are streamed directly to S3 and never materialized in memory.
-STREAM_LOADERS = {"istdaten_v2": fetch_istdaten_v2}
 
 
 # sources loaded in several invocations: name -> function(batch, batch_size)
@@ -226,28 +217,9 @@ def run(
                 observation_date=observation_date,
             )
         return result.uri
-    if source in STREAM_LOADERS:
-        response = STREAM_LOADERS[source]()
-        try:
-            run_datetime = (
-                datetime.fromisoformat(observation_date).replace(tzinfo=timezone.utc)
-                if observation_date
-                else None
-            )
-            if run_id is None:
-                uri = write_raw_stream(source, cast(Any, response.raw), "csv")
-            else:
-                uri = write_raw_stream(
-                    source,
-                    cast(Any, response.raw),
-                    "csv",
-                    run_id=run_id,
-                    now=run_datetime,
-                )
-        finally:
-            response.close()
-        logger.info("Loaded %s as stream -> %s", source, uri)
-        return uri
+    if source == "istdaten_v2":
+        # newest published day; history is loaded via the sync state machine
+        return str(load_latest()["uri"])
     data, extension = LOADERS[source]()
     if run_id is None:
         uri = write_raw(source, data, extension)
@@ -270,8 +242,22 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     "batch" (default 0) and "batch_size", and return "next_batch".
     The orchestration state machine uses ``action=finalize`` after the last
     batch to aggregate deterministic S3 manifests.
+
+    Ist-Daten v2: ``action=plan_istdaten_sync`` (optional ``input`` with
+    ``since``/``max_days``) returns the operating days to load;
+    ``{"source": "istdaten_v2", "operating_day": "YYYY-MM-DD"}`` loads one
+    day; without ``operating_day`` the newest published day is loaded.
     """
     logging.getLogger().setLevel(logging.INFO)
+    if event.get("action") == "plan_istdaten_sync":
+        options = event.get("input") or {}
+        if not isinstance(options, dict):
+            raise ValueError("plan_istdaten_sync 'input' must be an object")
+        max_days = options.get("max_days")
+        return plan_sync(
+            since=options.get("since"),
+            max_days=int(max_days) if max_days is not None else None,
+        )
     if event.get("action") == "prepare_daily":
         source = event.get("source")
         point_snapshot = event.get("point_snapshot")
@@ -346,6 +332,14 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             f"Event must contain a string 'source'; choose from {ALL_SOURCES}"
         )
     require_source(source)
+    if source == "istdaten_v2":
+        operating_day = event.get("operating_day")
+        if operating_day is None:
+            return load_latest()
+        if not isinstance(operating_day, str):
+            raise ValueError("operating_day must be a YYYY-MM-DD string")
+        date.fromisoformat(operating_day)
+        return load_operating_day(operating_day)
     validate_run_context(event, source)
     if source in BATCHED_LOADERS:
         if event.get("run_id") is None:

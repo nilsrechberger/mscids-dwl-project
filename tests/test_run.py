@@ -154,16 +154,50 @@ def test_run_unknown_source() -> None:
         run("nope")
 
 
-def test_run_istdaten_v2_streams_and_closes_response() -> None:
-    """Ist-Daten v2 is uploaded from the response stream and then closed"""
-    response = MagicMock()
-    with patch("src.run.STREAM_LOADERS", {"istdaten_v2": lambda: response}), patch(
-        "src.run.write_raw_stream", return_value="s3://b/k"
-    ) as write:
+def test_run_istdaten_v2_loads_latest_day() -> None:
+    """Local runs load the newest published Ist-Daten v2 day"""
+    with patch("src.run.load_latest", return_value={"uri": "s3://b/k"}) as load:
         assert run("istdaten_v2") == "s3://b/k"
+    load.assert_called_once_with()
 
-    write.assert_called_once_with("istdaten_v2", response.raw, "csv")
-    response.close.assert_called_once()
+
+def test_handler_istdaten_v2_loads_requested_day() -> None:
+    with patch(
+        "src.run.load_operating_day", return_value={"status": "completed"}
+    ) as load:
+        assert handler(
+            {"source": "istdaten_v2", "operating_day": "2026-11-20"}, None
+        ) == {"status": "completed"}
+    load.assert_called_once_with("2026-11-20")
+
+
+def test_handler_istdaten_v2_without_day_loads_latest() -> None:
+    with patch("src.run.load_latest", return_value={"status": "skipped"}):
+        assert handler({"source": "istdaten_v2"}, None) == {"status": "skipped"}
+
+
+def test_handler_istdaten_v2_rejects_invalid_day() -> None:
+    with pytest.raises(ValueError):
+        handler({"source": "istdaten_v2", "operating_day": "20.11.2026"}, None)
+
+
+def test_handler_plan_istdaten_sync_passes_options() -> None:
+    with patch("src.run.plan_sync", return_value={"operating_days": []}) as plan:
+        result = handler(
+            {
+                "action": "plan_istdaten_sync",
+                "input": {"since": "2026-10-01", "max_days": "5"},
+            },
+            None,
+        )
+    assert result == {"operating_days": []}
+    plan.assert_called_once_with(since="2026-10-01", max_days=5)
+
+
+def test_handler_plan_istdaten_sync_defaults() -> None:
+    with patch("src.run.plan_sync", return_value={}) as plan:
+        handler({"action": "plan_istdaten_sync", "input": {}}, None)
+    plan.assert_called_once_with(since=None, max_days=None)
 
 
 @pytest.mark.parametrize(

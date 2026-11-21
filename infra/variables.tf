@@ -105,3 +105,33 @@ variable "eventbridge_schedule_expression" {
   type        = string
   default     = "cron(0 6 * * ? *)"
 }
+
+variable "ckan_api_key_secret_arn" {
+  description = "ARN of the manually created Secrets Manager secret holding the opentransportdata CKAN API key. The key value itself never goes into Terraform."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "istdaten_sync_max_concurrency" {
+  description = "Maximum number of Ist-Daten v2 days loaded in parallel by the sync state machine."
+  type        = number
+  default     = 2
+  validation {
+    condition     = var.istdaten_sync_max_concurrency >= 1 && var.istdaten_sync_max_concurrency <= 5
+    error_message = "istdaten_sync_max_concurrency must be between 1 and 5."
+  }
+}
+
+variable "alarm_email" {
+  description = "E-mail address for pipeline alarms and budget notifications. Leave null to create the SNS topic without a subscription."
+  type        = string
+  default     = null
+  nullable    = true
+}
+
+variable "monthly_budget_usd" {
+  description = "Monthly AWS cost budget in USD. Notifications go to alarm_email at 80 % actual and 100 % forecasted spend."
+  type        = number
+  default     = 100
+}
