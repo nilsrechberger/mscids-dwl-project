@@ -15,7 +15,15 @@ class Config:
     GTFS_RT_API_ENDPOINT = os.getenv("GTFS_RT_API_ENDPOINT")
     GTFS_RT_API_TOKEN = os.getenv("GTFS_RT_API_TOKEN")
     MUNICIPALITY_XLSX = os.getenv("MUNICIPALITY_XLSX")
-    ISTDATEN_V2_ENDPOINT = os.getenv("ISTDATEN_V2_ENDPOINT")
+    ISTDATEN_V2_CKAN_ENDPOINT = os.getenv(
+        "ISTDATEN_V2_CKAN_ENDPOINT", "https://api.opentransportdata.swiss/ckan-api"
+    )
+    ISTDATEN_V2_DATASET_ID = os.getenv("ISTDATEN_V2_DATASET_ID", "ist-daten-v2")
+    # Local runs: the key itself. Lambda: only the Secrets Manager secret ID/ARN.
+    CKAN_API_KEY = os.getenv("CKAN_API_KEY")
+    CKAN_API_KEY_SECRET_ID = os.getenv("CKAN_API_KEY_SECRET_ID")
+    # A sync run fails when the newest published file is older than this
+    ISTDATEN_V2_MAX_AGE_DAYS = int(os.getenv("ISTDATEN_V2_MAX_AGE_DAYS", "2"))
     MUNICIPALITY_WEATHER_API_ENDPOINT = os.getenv(
         "MUNICIPALITY_WEATHER_API_ENDPOINT",
         "https://archive-api.open-meteo.com/v1/archive",

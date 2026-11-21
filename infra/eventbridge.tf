@@ -28,9 +28,12 @@ resource "aws_iam_role_policy" "eventbridge_step_functions" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Effect   = "Allow"
-      Action   = "states:StartExecution"
-      Resource = aws_sfn_state_machine.loader[0].arn
+      Effect = "Allow"
+      Action = "states:StartExecution"
+      Resource = [
+        aws_sfn_state_machine.loader[0].arn,
+        aws_sfn_state_machine.istdaten_sync[0].arn,
+      ]
     }]
   })
 }
@@ -39,7 +42,7 @@ resource "aws_cloudwatch_event_rule" "daily_istdaten_v2" {
   count = var.eventbridge_schedule_enabled && var.lambda_image_uri != null ? 1 : 0
 
   name                = "${local.eventbridge_schedule_name_prefix}-istdaten-v2"
-  description         = "Daily official Ist-Daten-v2 ingestion."
+  description         = "Daily Ist-Daten-v2 CKAN sync (missing and replaced days)."
   schedule_expression = var.eventbridge_schedule_expression
   state               = "ENABLED"
 }
@@ -47,21 +50,10 @@ resource "aws_cloudwatch_event_rule" "daily_istdaten_v2" {
 resource "aws_cloudwatch_event_target" "daily_istdaten_v2" {
   count = var.eventbridge_schedule_enabled && var.lambda_image_uri != null ? 1 : 0
 
-  rule = aws_cloudwatch_event_rule.daily_istdaten_v2[0].name
-  arn  = aws_lambda_function.loader[0].arn
-  input = jsonencode({
-    source = "istdaten_v2"
-  })
-}
-
-resource "aws_lambda_permission" "daily_istdaten_v2" {
-  count = var.eventbridge_schedule_enabled && var.lambda_image_uri != null ? 1 : 0
-
-  statement_id  = "AllowDailyIstdatenV2EventBridge"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.loader[0].function_name
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.daily_istdaten_v2[0].arn
+  rule     = aws_cloudwatch_event_rule.daily_istdaten_v2[0].name
+  arn      = aws_sfn_state_machine.istdaten_sync[0].arn
+  role_arn = aws_iam_role.eventbridge_step_functions[0].arn
+  input    = jsonencode({})
 }
 
 resource "aws_cloudwatch_event_rule" "daily_municipality_weather" {

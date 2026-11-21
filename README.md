@@ -71,7 +71,7 @@ s3://<S3_BUCKET>/raw/<source>/dt=YYYY-MM-DD/run=<run_id>/manifest_part0000.json
 s3://<S3_BUCKET>/raw/<source>/dt=YYYY-MM-DD/run=<run_id>/manifest.json
 ```
 
-`<source>` includes `istdaten_v2`, `municipality_weather`, `municipality`, `weather`, `transport` and `gtfs_rt`. The Ist-Daten-v2 daily CSV is written to `raw/istdaten_v2/` without loading the complete file into memory. Parsing and transformation happen in later pipeline stages.
+`<source>` includes `istdaten_v2`, `municipality_weather`, `municipality`, `weather`, `transport` and `gtfs_rt`. Ist-Daten v2 is synced from the opentransportdata.swiss CKAN catalogue: every missing or replaced daily file is streamed unchanged to `raw/istdaten_v2/dt=<operating day>/run=<version>/data.csv` with a manifest, without loading the complete file into memory (`python -m src.run istdaten_v2` loads the newest day locally). Parsing and transformation happen in later pipeline stages.
 
 ## Run contract and local validation
 
@@ -93,7 +93,7 @@ Every completed batch receives a `manifest_partXXXX.json`. `src.runs.finalize_ru
 
 ## Ist-Daten v2 municipality pipeline
 
-The feature branch `feat/istdaten-v2-municipality-pipeline` contains the locally validated implementation for the official Ist-Daten v2 daily files. Bronze keeps the source CSV unchanged; Silver normalizes the German source columns and adds delay-quality fields; Gold aggregates transport and weather by BFS municipality and operating date.
+The scripts below are the locally validated implementation for the official Ist-Daten v2 daily files. Bronze keeps the source CSV unchanged; Silver normalizes the German source columns and adds delay-quality fields; Gold aggregates transport and weather by BFS municipality and operating date.
 
 The local pipeline performs the following steps:
 
@@ -149,7 +149,7 @@ python -m scripts.smoke_test_run_contract \
 
 The scripts under `scripts/` are intentionally local spike tooling. Large source files, downloaded GTFS archives, GeoJSON boundaries and generated outputs belong under `.work/` and must not be committed.
 
-The local pipeline is now complemented by the AWS runtime work on `feat/aws-runtime-orchestration`: Terraform provisions the ECR repository, Lambda execution role, optional Lambda image function, and a Step Functions batch loop with deterministic manifest finalization. EventBridge scheduling remains a later step. Generated source files and outputs belong under `.work/` and must not be committed.
+The AWS runtime is described in [infra/runtime.md](infra/runtime.md): Terraform provisions the ECR repository, the Lambda container, the Step Functions workflows (municipality weather batches, Ist-Daten v2 CKAN sync), the daily EventBridge schedules, alarms and a cost budget. Generated source files and outputs belong under `.work/` and must not be committed.
 
 ## Setup
 
@@ -215,13 +215,7 @@ curl -XPOST http://localhost:9000/2015-03-31/functions/function/invocations \
 
 ### Deploy
 
-1. Create an ECR repository, then build and push the image. Add `--platform linux/arm64` if the function runs on arm64.
-2. Create the Lambda function from the image.
-   - Execution role needs `s3:PutObject` on the data lake bucket.
-   - Set the variables from `.env.example` as environment variables (keep `GTFS_RT_API_TOKEN` in Secrets Manager or SSM).
-   - Use a timeout well above the 3 s default and at least 512 MB memory.
-3. Create one EventBridge Scheduler rule per source, each passing `{"source": "<name>"}` as input.
-4. `transport` is loaded in batches of `TRANSPORT_BATCH_SIZE` municipalities (default 300) so one invocation stays below the Lambda timeout. Run the `municipality` source first: transport reads the municipality names from its newest raw file, so they are not downloaded for every batch. Then invoke it with `{"source": "transport", "batch": 0}`. The execution role also needs `s3:ListBucket` and `s3:GetObject` on the bucket. The response contains `next_batch` (`null` after the last batch). Let the scheduler start a Step Functions state machine that loops on `next_batch` until it is `null`. Each batch is written as `raw/transport/dt=YYYY-MM-DD/HHMMSS_partNNNN.json`. Locally, `python -m src.run transport` runs all batches in sequence.
+Deployment is managed with Terraform in [infra/](infra/). Follow [infra/runtime.md](infra/runtime.md) for the sequence (image build, apply, secret, smoke tests, schedules). The CKAN API key is stored in AWS Secrets Manager and only referenced by ARN; it never goes into Terraform variables, Lambda environment variables or Git.
 
 # Contact
 

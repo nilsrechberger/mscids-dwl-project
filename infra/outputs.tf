@@ -42,3 +42,13 @@ output "loader_state_machine_arn" {
   description = "Step Functions state machine ARN when an image URI is configured."
   value       = try(aws_sfn_state_machine.loader[0].arn, null)
 }
+
+output "istdaten_sync_state_machine_arn" {
+  description = "Ist-Daten v2 CKAN sync state machine ARN when an image URI is configured."
+  value       = try(aws_sfn_state_machine.istdaten_sync[0].arn, null)
+}
+
+output "alarm_topic_arn" {
+  description = "SNS topic that receives pipeline alarms."
+  value       = aws_sns_topic.alarms.arn
+}

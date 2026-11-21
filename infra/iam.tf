@@ -10,6 +10,7 @@ data "aws_iam_policy_document" "loader_s3" {
       test     = "StringLike"
       variable = "s3:prefix"
       values = [
+        "raw/istdaten_v2/*",
         "raw/municipality/*",
         "raw/municipality_weather/*",
         "reference/*",
@@ -23,6 +24,7 @@ data "aws_iam_policy_document" "loader_s3" {
 
     actions = ["s3:GetObject"]
     resources = [
+      "${aws_s3_bucket.data_lake.arn}/raw/istdaten_v2/*",
       "${aws_s3_bucket.data_lake.arn}/reference/*",
       "${aws_s3_bucket.data_lake.arn}/raw/municipality/*",
       "${aws_s3_bucket.data_lake.arn}/raw/municipality_weather/*",
