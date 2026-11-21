@@ -6,14 +6,14 @@ resource "aws_sns_topic" "alarms" {
   }
 }
 
-# AWS sends a confirmation e-mail; alarms are delivered only after the
-# subscription has been confirmed by clicking the link.
+# AWS sends a confirmation e-mail to each address; alarms are delivered only
+# after the subscription has been confirmed by clicking the link.
 resource "aws_sns_topic_subscription" "alarm_email" {
-  count = var.alarm_email == null ? 0 : 1
+  for_each = toset(var.alarm_emails)
 
   topic_arn = aws_sns_topic.alarms.arn
   protocol  = "email"
-  endpoint  = var.alarm_email
+  endpoint  = each.value
 }
 
 resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
@@ -67,7 +67,7 @@ resource "aws_cloudwatch_metric_alarm" "state_machine_failures" {
 }
 
 resource "aws_budgets_budget" "monthly" {
-  count = var.alarm_email == null ? 0 : 1
+  count = length(var.alarm_emails) == 0 ? 0 : 1
 
   name         = "${var.project_name}-${var.environment}-monthly"
   budget_type  = "COST"
@@ -80,7 +80,7 @@ resource "aws_budgets_budget" "monthly" {
     threshold                  = 80
     threshold_type             = "PERCENTAGE"
     notification_type          = "ACTUAL"
-    subscriber_email_addresses = [var.alarm_email]
+    subscriber_email_addresses = var.alarm_emails
   }
 
   notification {
@@ -88,6 +88,6 @@ resource "aws_budgets_budget" "monthly" {
     threshold                  = 100
     threshold_type             = "PERCENTAGE"
     notification_type          = "FORECASTED"
-    subscriber_email_addresses = [var.alarm_email]
+    subscriber_email_addresses = var.alarm_emails
   }
 }

@@ -59,7 +59,7 @@ Files are stored as `raw/istdaten_v2/dt=<operating day>/run=istdaten-v2-<day>-<h
 
 ## Alarms and budget
 
-All alarms publish to the SNS topic `<project>-<environment>-alarms`. With `alarm_email` set, Terraform subscribes that address (confirm the AWS e-mail once) and creates a monthly cost budget (`monthly_budget_usd`, notifications at 80 % actual and 100 % forecasted). Alarms: loader Lambda `Errors > 0`, and `ExecutionsFailed`, `ExecutionsTimedOut`, `ExecutionsAborted > 0` for both state machines.
+All alarms publish to the SNS topic `<project>-<environment>-alarms`. With `alarm_emails` set, Terraform subscribes every address (each recipient confirms the AWS e-mail once) and creates a monthly cost budget (`monthly_budget_usd`, notifications at 80 % actual and 100 % forecasted). Alarms: loader Lambda `Errors > 0`, and `ExecutionsFailed`, `ExecutionsTimedOut`, `ExecutionsAborted > 0` for both state machines.
 
 ## Daily EventBridge preparation
 
@@ -79,7 +79,7 @@ When a scheduled weather execution omits `observation_date` and `run_id`, the st
    The platform must match `lambda_architecture` (default `x86_64`, i.e. `linux/amd64`; CloudShell builds it natively). `--provenance=false` keeps a single-platform image manifest, which Lambda requires.
 
 3. Set `lambda_image_uri` to the pushed tag (or digest) and apply again. Terraform then creates the Lambda function, its log group, the execution role, and the Step Functions state machines (`loader`, `istdaten-sync`).
-4. Create the CKAN API key secret (see above), set `ckan_api_key_secret_arn` and `alarm_email`, and apply again. Confirm the SNS subscription e-mail.
+4. Create the CKAN API key secret (see above), set `ckan_api_key_secret_arn` and `alarm_emails`, and apply again. Each recipient confirms the SNS subscription e-mail.
 5. Upload the immutable weather-point snapshot before starting a `municipality_weather` run, for example `reference/municipality_weather/points-v1.csv`.
 6. Start both state machines manually during this phase (for the first sync, `{"max_days": 1}` is a cheap smoke test). EventBridge remains disabled until its separate plan is reviewed and applied.
 
