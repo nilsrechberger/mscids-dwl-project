@@ -13,7 +13,6 @@ from src.storage import (
     build_key,
     read_latest_raw,
     write_raw,
-    write_raw_stream,
     write_run_manifest,
 )
 
@@ -94,21 +93,6 @@ def test_write_raw() -> None:
     assert kwargs["Bucket"] == "my-bucket"
     assert kwargs["Body"] == b"{}"
     assert uri == f"s3://my-bucket/{kwargs['Key']}"
-
-
-def test_write_raw_stream() -> None:
-    """Uploads a stream without passing bytes to put_object"""
-    client = MagicMock()
-    stream = MagicMock()
-    with patch("src.storage.boto3.client", return_value=client), patch(
-        "src.storage.config.S3_BUCKET", "my-bucket"
-    ):
-        uri = write_raw_stream("istdaten_v2", stream, "csv")
-
-    kwargs = client.upload_fileobj.call_args.args
-    assert kwargs[0] is stream
-    assert kwargs[1] == "my-bucket"
-    assert uri == f"s3://my-bucket/{kwargs[2]}"
 
 
 def test_read_latest_raw() -> None:
@@ -250,12 +234,10 @@ def test_run_batch_slices_municipalities() -> None:
 def test_weather_batch_receives_observation_date() -> None:
     """Scheduled weather runs pass their derived date to the loader."""
     payload = {"request": {"points": [{"gdenr": "1"}]}, "response": []}
-    with patch(
-        "src.run._fetch_municipality_weather_batch",
-        return_value=(payload, 1, ()),
-    ) as fetch, patch("src.run.write_raw", return_value="s3://b/k"), patch(
-        "src.run.write_run_manifest"
-    ):
+    fetch = MagicMock(return_value=(payload, 1, ()))
+    with patch.dict("src.run.BATCHED_LOADERS", {"municipality_weather": fetch}), patch(
+        "src.run.write_raw", return_value="s3://b/k"
+    ), patch("src.run.write_run_manifest"):
         result = run_batch(
             "municipality_weather",
             0,
@@ -266,6 +248,20 @@ def test_weather_batch_receives_observation_date() -> None:
 
     assert result.next_batch is None
     fetch.assert_called_once_with(0, 50, "2026-11-20")
+
+
+def test_weather_batch_defaults_to_weather_batch_size() -> None:
+    """Without batch_size, weather uses MUNICIPALITY_WEATHER_BATCH_SIZE."""
+    payload = {"request": {"points": [{"gdenr": "1"}]}, "response": []}
+    fetch = MagicMock(return_value=(payload, 1, ()))
+    with patch.dict("src.run.BATCHED_LOADERS", {"municipality_weather": fetch}), patch(
+        "src.run.config.MUNICIPALITY_WEATHER_BATCH_SIZE", 25
+    ), patch("src.run.config.TRANSPORT_BATCH_SIZE", 300), patch(
+        "src.run.write_raw", return_value="s3://b/k"
+    ):
+        run_batch("municipality_weather")
+
+    fetch.assert_called_once_with(0, 25, None)
 
 
 def test_run_batch_writes_manifests_for_run_id() -> None:

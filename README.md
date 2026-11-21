@@ -29,30 +29,30 @@ A Data Lake and Data Warehouse for Analysing Weather- and Time-Related Delays in
 
 ```bash
 .
-├── .github/workflows/ci.yml            # CI: black, mypy, pytest, Docker build
-├── .env.example                        # Example .env file
-├── .gitignore                          # Git ignore file
+├── .github/workflows/ci.yml            # CI: black, mypy, pytest, Docker build, Terraform fmt/validate
+├── .env.example                        # Example .env file (placeholders only)
 ├── CLAUDE.md                           # Project instructions for Claude Code
 ├── Dockerfile                          # AWS Lambda container image
 ├── docker-compose.yml                  # Run the Lambda image locally
-├── mypy.ini                            # Mypy config
-├── pytest.ini                          # Pytest config
-├── README.md                           # Project documentation
 ├── requirements.txt                    # Runtime dependencies
 ├── requirements-dev.txt                # Dev dependencies (pytest, black, mypy)
+├── infra                               # Terraform: S3, ECR, Lambda, Step Functions, EventBridge, alarms
+│   ├── README.md                       # IaC overview and key contract
+│   ├── runtime.md                      # Runtime, secrets, deployment sequence
+│   └── environments/*.tfvars.example   # Example variables (real *.tfvars are gitignored)
 ├── src
 │   ├── config.py                       # Reads endpoints, tokens and bucket from env
+│   ├── http.py                         # Shared HTTP session with retries
+│   ├── istdaten_sync.py                # Ist-Daten v2 CKAN sync (plan and load days)
 │   ├── log.py                          # Logging setup
 │   ├── run.py                          # Entry point and Lambda handler
-│   ├── storage.py                      # Writes raw files to S3
+│   ├── runs.py                         # Run-context validation and manifest finalization
+│   ├── sources.py                      # Source contracts (production vs legacy)
+│   ├── storage.py                      # Writes raw files and manifests to S3
 │   └── loaders                         # Data loaders (see loaders/README.md)
-└── tests                               # Pytest tests
-    ├── conftest.py
-    ├── test_gtfs_rt.py
-    ├── test_municipality.py
-    ├── test_run.py
-    ├── test_transport.py
-    └── test_weather.py
+├── scripts                             # Local Silver/Gold and reference-data tooling
+├── utils                               # Early cost estimator (GTFS-RT era, not maintained)
+└── tests                               # Pytest tests (no network, no AWS)
 ```
 
 ## Data Lake Layout
@@ -127,13 +127,19 @@ mypy src tests
 
 # Profile and validate local source data
 python scripts/profile_istdaten.py --input <istdaten.csv> --output-dir <profile-dir>
-python scripts/extract_gtfs_stops.py --zip <gtfs.zip> --output <stops.csv>
 python scripts/profile_delay_quality.py --input <istdaten.csv> --output <delay-profile.json>
+python scripts/match_istdaten_stops.py --istdaten <istdaten.csv> --stops <stops.csv> --output-dir <dir>   # stop match rate (RQ4)
+
+# Reference data (versioned snapshots under reference/ in S3)
+python scripts/extract_gtfs_stops.py --zip <gtfs.zip> --output <stops.csv>
+python scripts/join_stops_municipalities.py --stops <stops.csv> --boundaries <municipalities.geojson> --output <stops_municipalities.csv>
+python scripts/build_municipality_weather_points.py --stops <stops_municipalities.csv> --output <municipality_weather_points.csv>
 
 # Silver and Gold transformations
 python -m scripts.normalize_istdaten_silver --input <istdaten.csv> --output <silver.csv>
 python -m scripts.join_istdaten_municipalities --silver <silver.csv> --stops <stops_municipalities.csv> --output <mapped.csv>
 python scripts/aggregate_silver_municipality_daily.py --input <mapped.csv> --output <transport_daily.csv>
+python scripts/fetch_municipality_weather.py --points <points.csv> --output <weather_hourly.csv> --start-date <d> --end-date <d>   # local only; AWS uses the municipality_weather loader
 python scripts/aggregate_weather_daily.py --input <weather_hourly.csv> --output <weather_daily.csv>
 python scripts/join_municipality_daily.py --transport <transport_daily.csv> --weather <weather_daily.csv> --output <municipality_daily.csv>
 

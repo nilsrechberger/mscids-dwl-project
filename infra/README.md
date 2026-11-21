@@ -1,16 +1,18 @@
 # AWS Data Lake IaC
 
-This directory contains the first, backend-less Terraform layer for the project. It is intentionally safe to validate locally without AWS credentials and does not deploy anything by itself.
+Terraform for the AWS data lake and its runtime. Each environment (`test`, `prod`) is a separate stack: all resource names contain `var.environment`, and the S3 backend is configured per environment at `terraform init` (partial backend configuration in `backend.tf`).
 
-## Planned physical resources
+## Resources
 
-- one S3 data-lake bucket for `raw/`, `reference/`, `silver/` and `gold/` prefixes;
-- one separately bootstrapped S3 state bucket, managed by this configuration only after the backend bootstrap decision is complete;
-- one least-privilege managed policy for the loader's S3 access.
-- an ECR repository, Lambda container execution role and CloudWatch log group;
-- an optional Lambda container function and Step Functions batch loop when `lambda_image_uri` is configured.
+- S3 data-lake bucket with `raw/`, `reference/`, `silver/` and `gold/` prefixes (versioning, encryption, public-access block, lifecycle rules);
+- optional Terraform state bucket (`create_state_bucket`, normally bootstrapped separately);
+- least-privilege S3 policy for the loader;
+- ECR repository (immutable tags, scan on push), Lambda execution role and CloudWatch log group;
+- when `lambda_image_uri` is set: the Lambda container function and the Step Functions workflows `loader` (batched sources) and `istdaten-sync` (Ist-Daten v2 CKAN sync);
+- daily EventBridge rules (`eventbridge_schedule_enabled`, disabled by default);
+- SNS alarm topic, CloudWatch alarms and a monthly budget (`alarm_email`, `monthly_budget_usd`).
 
-The state bucket is disabled by default with `create_state_bucket = false`. A Terraform backend cannot safely create the bucket that stores its own state in the same first apply. Bootstrap and remote-backend activation are therefore a later, explicit step.
+Secrets are never Terraform values: the CKAN API key is created manually in Secrets Manager and passed by ARN (`ckan_api_key_secret_arn`). Details and the deployment sequence: [`runtime.md`](runtime.md).
 
 ## Local validation
 
@@ -33,6 +35,8 @@ Run-based objects use the application contract:
 raw/<source>/dt=<observation_date>/run=<run_id>/part0000.json
 raw/<source>/dt=<observation_date>/run=<run_id>/manifest_part0000.json
 raw/<source>/dt=<observation_date>/run=<run_id>/manifest.json
+raw/istdaten_v2/dt=<operating_day>/run=istdaten-v2-<day>-<hash12>/data.csv
+raw/istdaten_v2/dt=<operating_day>/run=istdaten-v2-<day>-<hash12>/manifest.json
 ```
 
-The runtime deployment sequence and state-machine input contract are documented in [`runtime.md`](runtime.md). EventBridge scheduling is intentionally deferred until the manual state-machine path is verified.
+`dt` is always the observation or operating day, never the ingestion date. The state-machine input contracts are documented in [`runtime.md`](runtime.md).

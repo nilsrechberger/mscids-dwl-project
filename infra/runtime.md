@@ -73,10 +73,12 @@ When a scheduled weather execution omits `observation_date` and `run_id`, the st
 
    ```bash
    aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <account>.dkr.ecr.us-east-1.amazonaws.com
-   docker buildx build --platform linux/arm64 -t <repository-url>:<immutable-tag> --push .
+   docker buildx build --platform linux/amd64 --provenance=false -t <repository-url>:<immutable-tag> --push .
    ```
 
-3. Set `lambda_image_uri` to the pushed tag (or digest) and apply again. Terraform then creates the Lambda function, its log group, the execution role, and the Step Functions state machine.
+   The platform must match `lambda_architecture` (default `x86_64`, i.e. `linux/amd64`; CloudShell builds it natively). `--provenance=false` keeps a single-platform image manifest, which Lambda requires.
+
+3. Set `lambda_image_uri` to the pushed tag (or digest) and apply again. Terraform then creates the Lambda function, its log group, the execution role, and the Step Functions state machines (`loader`, `istdaten-sync`).
 4. Create the CKAN API key secret (see above), set `ckan_api_key_secret_arn` and `alarm_email`, and apply again. Confirm the SNS subscription e-mail.
 5. Upload the immutable weather-point snapshot before starting a `municipality_weather` run, for example `reference/municipality_weather/points-v1.csv`.
 6. Start both state machines manually during this phase (for the first sync, `{"max_days": 1}` is a cheap smoke test). EventBridge remains disabled until its separate plan is reviewed and applied.

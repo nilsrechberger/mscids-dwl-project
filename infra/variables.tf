@@ -13,7 +13,7 @@ variable "environment" {
 variable "aws_region" {
   description = "AWS region for the data lake."
   type        = string
-  default     = "eu-central-1"
+  default     = "us-east-1"
 }
 
 variable "data_bucket_name" {
@@ -54,9 +54,9 @@ variable "lambda_image_uri" {
 }
 
 variable "lambda_architecture" {
-  description = "Lambda instruction set architecture used by the container image."
+  description = "Lambda instruction set architecture. Must match the image platform (x86_64 = docker --platform linux/amd64, arm64 = linux/arm64)."
   type        = string
-  default     = "arm64"
+  default     = "x86_64"
   validation {
     condition     = contains(["arm64", "x86_64"], var.lambda_architecture)
     error_message = "lambda_architecture must be arm64 or x86_64."
