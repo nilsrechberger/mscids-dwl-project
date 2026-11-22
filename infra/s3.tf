@@ -61,6 +61,19 @@ resource "aws_s3_bucket_lifecycle_configuration" "data_lake" {
       noncurrent_days = var.raw_noncurrent_expiration_days
     }
   }
+
+  rule {
+    id     = "expire-athena-results"
+    status = "Enabled"
+
+    filter {
+      prefix = local.athena_results_prefix
+    }
+
+    expiration {
+      days = var.athena_results_expiration_days
+    }
+  }
 }
 
 resource "aws_s3_object" "data_lake_prefixes" {

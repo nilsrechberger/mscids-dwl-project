@@ -10,7 +10,8 @@ Terraform for the AWS data lake and its runtime. Each environment (`test`, `prod
 - ECR repository (immutable tags, scan on push), Lambda execution role and CloudWatch log group;
 - when `lambda_image_uri` is set: the Lambda container function and the Step Functions workflows `loader` (batched sources) and `istdaten-sync` (Ist-Daten v2 CKAN sync);
 - daily EventBridge rules (`eventbridge_schedule_enabled`, disabled by default);
-- SNS alarm topic, CloudWatch alarms and a monthly budget (`alarm_emails`, `monthly_budget_usd`).
+- SNS alarm topic, CloudWatch alarms and a monthly budget (`alarm_emails`, `monthly_budget_usd`);
+- Glue Data Catalog database `<project>_<environment>_raw` with the raw Ist-Daten table (partition projection on `dt`) and the Athena workgroup `<project>-<environment>` (results under `athena-results/`, expiring after `athena_results_expiration_days`, scan limit `athena_bytes_scanned_cutoff`). Query patterns: [`../sql/README.md`](../sql/README.md).
 
 Secrets are never Terraform values: the CKAN API key is created manually in Secrets Manager and passed by ARN (`ckan_api_key_secret_arn`). Details and the deployment sequence: [`runtime.md`](runtime.md).
 

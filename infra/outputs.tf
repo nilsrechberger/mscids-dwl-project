@@ -52,3 +52,13 @@ output "alarm_topic_arn" {
   description = "SNS topic that receives pipeline alarms."
   value       = aws_sns_topic.alarms.arn
 }
+
+output "glue_raw_database_name" {
+  description = "Glue Data Catalog database for the raw layer."
+  value       = aws_glue_catalog_database.raw.name
+}
+
+output "athena_workgroup_name" {
+  description = "Athena workgroup for data-lake queries (results under athena-results/)."
+  value       = aws_athena_workgroup.main.name
+}

@@ -36,7 +36,7 @@ A Data Lake and Data Warehouse for Analysing Weather- and Time-Related Delays in
 ├── docker-compose.yml                  # Run the Lambda image locally
 ├── requirements.txt                    # Runtime dependencies
 ├── requirements-dev.txt                # Dev dependencies (pytest, black, mypy)
-├── infra                               # Terraform: S3, ECR, Lambda, Step Functions, EventBridge, alarms
+├── infra                               # Terraform: S3, ECR, Lambda, Step Functions, EventBridge, alarms, Glue/Athena
 │   ├── README.md                       # IaC overview and key contract
 │   ├── runtime.md                      # Runtime, secrets, deployment sequence
 │   └── environments/*.tfvars.example   # Example variables (real *.tfvars are gitignored)
@@ -50,6 +50,7 @@ A Data Lake and Data Warehouse for Analysing Weather- and Time-Related Delays in
 │   ├── sources.py                      # Source contracts (production vs legacy)
 │   ├── storage.py                      # Writes raw files and manifests to S3
 │   └── loaders                         # Data loaders (see loaders/README.md)
+├── sql                                 # Athena queries on the Glue catalog (see sql/README.md)
 ├── scripts                             # Local Silver/Gold and reference-data tooling
 ├── utils                               # Early cost estimator (GTFS-RT era, not maintained)
 └── tests                               # Pytest tests (no network, no AWS)

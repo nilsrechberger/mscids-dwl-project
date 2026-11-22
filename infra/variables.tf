@@ -138,3 +138,19 @@ variable "monthly_budget_usd" {
   type        = number
   default     = 100
 }
+
+variable "athena_results_expiration_days" {
+  description = "Days after which Athena query results under athena-results/ expire."
+  type        = number
+  default     = 30
+}
+
+variable "athena_bytes_scanned_cutoff" {
+  description = "Maximum bytes one Athena query in the workgroup may scan (cost guard, minimum 10 MB). Default 50 GB, about 0.25 USD per query."
+  type        = number
+  default     = 53687091200
+  validation {
+    condition     = var.athena_bytes_scanned_cutoff >= 10485760
+    error_message = "athena_bytes_scanned_cutoff must be at least 10 MB (10485760 bytes)."
+  }
+}
