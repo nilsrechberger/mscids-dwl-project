@@ -36,8 +36,9 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
 
 locals {
   monitored_state_machines = var.lambda_image_uri == null ? {} : {
-    loader        = aws_sfn_state_machine.loader[0].arn
-    istdaten-sync = aws_sfn_state_machine.istdaten_sync[0].arn
+    loader           = aws_sfn_state_machine.loader[0].arn
+    istdaten-sync    = aws_sfn_state_machine.istdaten_sync[0].arn
+    istdaten-archive = aws_sfn_state_machine.istdaten_archive[0].arn
   }
   state_machine_failure_metrics = ["ExecutionsFailed", "ExecutionsTimedOut", "ExecutionsAborted"]
   state_machine_alarms = {

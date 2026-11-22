@@ -24,6 +24,10 @@ class Config:
     CKAN_API_KEY_SECRET_ID = os.getenv("CKAN_API_KEY_SECRET_ID")
     # A sync run fails when the newest published file is older than this
     ISTDATEN_V2_MAX_AGE_DAYS = int(os.getenv("ISTDATEN_V2_MAX_AGE_DAYS", "2"))
+    # Monthly ZIP archives for days outside the CKAN window
+    ISTDATEN_ARCHIVE_BASE_URL = os.getenv(
+        "ISTDATEN_ARCHIVE_BASE_URL", "https://archive.opentransportdata.swiss/istdaten"
+    )
     MUNICIPALITY_WEATHER_API_ENDPOINT = os.getenv(
         "MUNICIPALITY_WEATHER_API_ENDPOINT",
         "https://archive-api.open-meteo.com/v1/archive",

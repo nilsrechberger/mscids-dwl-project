@@ -48,6 +48,11 @@ output "istdaten_sync_state_machine_arn" {
   value       = try(aws_sfn_state_machine.istdaten_sync[0].arn, null)
 }
 
+output "istdaten_archive_state_machine_arn" {
+  description = "ARN of the Ist-Daten v2 archive import state machine, or null before the first image deployment."
+  value       = try(aws_sfn_state_machine.istdaten_archive[0].arn, null)
+}
+
 output "alarm_topic_arn" {
   description = "SNS topic that receives pipeline alarms."
   value       = aws_sns_topic.alarms.arn
