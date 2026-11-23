@@ -123,6 +123,16 @@ variable "istdaten_sync_max_concurrency" {
   }
 }
 
+variable "istdaten_archive_max_concurrency" {
+  description = "Maximum number of archive days imported in parallel by the istdaten-archive state machine."
+  type        = number
+  default     = 3
+  validation {
+    condition     = var.istdaten_archive_max_concurrency >= 1 && var.istdaten_archive_max_concurrency <= 10
+    error_message = "istdaten_archive_max_concurrency must be between 1 and 10."
+  }
+}
+
 variable "alarm_emails" {
   description = "E-mail addresses for pipeline alarms and budget notifications (at most 10). Leave empty to create the SNS topic without subscriptions and without a budget."
   type        = list(string)

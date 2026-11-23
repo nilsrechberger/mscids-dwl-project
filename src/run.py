@@ -26,7 +26,13 @@ from src.loaders.transport import fetch_all_locations_with_status
 from src.loaders.weather import fetch_weather
 from src.log import setup_logging
 from src.sources import ALL_SOURCES, require_source
-from src.istdaten_sync import load_latest, load_operating_day, plan_sync
+from src.istdaten_sync import (
+    load_archive_day,
+    load_latest,
+    load_operating_day,
+    plan_archive_import,
+    plan_sync,
+)
 from src.storage import read_latest_raw, write_raw, write_run_manifest
 from src.runs import finalize_run, validate_run_context
 
@@ -263,6 +269,10 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     ``since``/``max_days``) returns the operating days to load;
     ``{"source": "istdaten_v2", "operating_day": "YYYY-MM-DD"}`` loads one
     day; without ``operating_day`` the newest published day is loaded.
+    ``action=plan_istdaten_archive`` (``input`` with ``since``, ``until`` and
+    optional ``max_days``) lists archive days that are not loaded yet; adding
+    ``"archive_month": "YYYY-MM"`` to the load event reads the day from the
+    monthly ZIP archive instead of CKAN.
     """
     logging.getLogger().setLevel(logging.INFO)
     if event.get("action") == "plan_istdaten_sync":
@@ -273,6 +283,19 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return plan_sync(
             since=options.get("since"),
             max_days=int(max_days) if max_days is not None else None,
+        )
+    if event.get("action") == "plan_istdaten_archive":
+        archive_options = event.get("input") or {}
+        if not isinstance(archive_options, dict):
+            raise ValueError("plan_istdaten_archive 'input' must be an object")
+        since, until = archive_options.get("since"), archive_options.get("until")
+        if not isinstance(since, str) or not isinstance(until, str):
+            raise ValueError("plan_istdaten_archive needs 'since' and 'until'")
+        archive_max_days = archive_options.get("max_days")
+        return plan_archive_import(
+            since,
+            until,
+            int(archive_max_days) if archive_max_days is not None else None,
         )
     if event.get("action") == "prepare_daily":
         source = event.get("source")
@@ -357,6 +380,11 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         if not isinstance(operating_day, str):
             raise ValueError("operating_day must be a YYYY-MM-DD string")
         date.fromisoformat(operating_day)
+        archive_month = event.get("archive_month")
+        if archive_month is not None:
+            if not isinstance(archive_month, str):
+                raise ValueError("archive_month must be a YYYY-MM string")
+            return load_archive_day(operating_day, archive_month)
         return load_operating_day(operating_day)
     validate_run_context(event, source)
     if source in BATCHED_LOADERS:

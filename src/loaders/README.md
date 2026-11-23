@@ -10,6 +10,10 @@ Lists the daily Ist-Daten v2 CSVs through the opentransportdata.swiss CKAN API (
 
 [../istdaten_sync.py](../istdaten_sync.py) compares the catalogue with the manifests in S3 and loads every day that is missing or whose file the provider replaced. Each version is streamed unchanged to `raw/istdaten_v2/dt=<operating day>/run=istdaten-v2-<day>-<hash12>/data.csv`; the `manifest.json` next to it records bytes, MD5, CSV header and the CKAN metadata and is written only after a complete upload. Column normalization and delay-quality flags belong to later Silver processing; Silver uses the newest run per operating day.
 
+[istdaten_archive.py](istdaten_archive.py) — `list_archive_members(month) -> list[ArchiveMember]`, `open_archive(month)`, `HttpRangeFile`
+
+Days that have left the CKAN window come from the monthly ZIP archives `ISTDATEN_ARCHIVE_BASE_URL/<YYYY>/ist-daten-v2-<YYYY-MM>.zip` (public, from 2025-07; July 2025 is incomplete). A month is 1.2–1.5 GB compressed with one `<YYYY-MM-DD>_IstDaten.csv` per day. The archive host answers HTTP range requests, so `HttpRangeFile` presents the remote ZIP as a seekable file: `zipfile` reads only the central directory and the one member it needs, decompresses it while streaming and checks its CRC32. `plan_archive_import(since, until)` and `load_archive_day(day, month)` in `istdaten_sync.py` store each day in the same layout as the CKAN sync, with the member's CRC32 as version marker (`run=istdaten-v2-<day>-<crc32>`) and `origin: archive` plus the ZIP URL and member in the manifest. Days that already have any loaded version are skipped. Files up to October 2025 have 21 columns (no `SLOID`); from November 2025 on they have 22, like the CKAN files.
+
 ## GTFS-RT
 
 [gtfs_rt.py](gtfs_rt.py) — `fetch_gtfs_rt() -> dict`

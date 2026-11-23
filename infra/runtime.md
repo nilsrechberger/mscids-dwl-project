@@ -61,6 +61,19 @@ Files are stored as `raw/istdaten_v2/dt=<operating day>/run=istdaten-v2-<day>-<h
 
 All alarms publish to the SNS topic `<project>-<environment>-alarms`. With `alarm_emails` set, Terraform subscribes every address (each recipient confirms the AWS e-mail once) and creates a monthly cost budget (`monthly_budget_usd`, notifications at 80 % actual and 100 % forecasted). Alarms: loader Lambda `Errors > 0`, and `ExecutionsFailed`, `ExecutionsTimedOut`, `ExecutionsAborted > 0` for both state machines.
 
+## Ist-Daten v2 archive import
+
+The `istdaten-archive` state machine imports days older than the CKAN window from the monthly ZIP archives (public, from 2025-07). It is started manually and never scheduled:
+
+```json
+{"since": "2025-08-01", "until": "2026-10-31", "max_days": 31}
+```
+
+1. `PlanImport` (`action = plan_istdaten_archive`) reads the central directory of every monthly ZIP in the range (a few small range requests per month) and lists each day without any loaded version, oldest first. Months whose archive is not published yet are reported in `missing_months`.
+2. `LoadDays` loads each day with one Lambda invocation (`{"source": "istdaten_v2", "operating_day": "...", "archive_month": "YYYY-MM"}`), at most `istdaten_archive_max_concurrency` (default 3) in parallel. The Lambda streams the ZIP member with range requests, decompresses it on the fly and verifies its CRC32; a corrupt member fails before the manifest is written.
+
+Imported days use the same key layout as the CKAN sync with the CRC32 as version marker (`run=istdaten-v2-<day>-<crc32>`); their manifest has `origin: archive` and the ZIP URL and member. A day that already has any version (for example from CKAN) is skipped, so restarting the import is safe. The per-day results are not kept in the execution output (state size limit); the manifests in S3 are the record. Start with `max_days` in the test environment and check the result with Athena before importing the full range in prod.
+
 ## Daily EventBridge preparation
 
 The Terraform configuration contains two daily EventBridge rules: Ist-Daten-v2 starts the `istdaten-sync` state machine, municipality-weather starts the `loader` state machine. They are disabled by default with `eventbridge_schedule_enabled = false` and must remain disabled until the schedule has been reviewed in the test environment. The municipality register is a static reference snapshot and is loaded once per snapshot version or manually when the official reference changes; it is not part of the daily schedule.

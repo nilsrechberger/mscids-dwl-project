@@ -9,6 +9,12 @@ the file version (the CKAN content hash):
 The manifest is written only after a complete upload, so its existence marks a
 loaded version. Planning compares the catalogue against these manifests and
 returns every day that is missing or whose file was replaced by the provider.
+
+Days older than the CKAN window come from the monthly ZIP archives
+(``plan_archive_import`` / ``load_archive_day``). They use the same layout; the
+version marker is the CRC32 of the ZIP member instead of the CKAN hash, and a
+day that already has any loaded version is skipped, so archive and CKAN files
+never coexist for one day.
 """
 
 import hashlib
@@ -21,6 +27,12 @@ import boto3
 from botocore.exceptions import ClientError
 
 from src.config import config
+from src.loaders.istdaten_archive import (
+    ArchiveNotFound,
+    list_archive_members,
+    open_archive,
+    validate_month,
+)
 from src.loaders.istdaten_v2 import (
     IstdatenResource,
     find_resource,
@@ -270,3 +282,190 @@ def load_latest() -> dict[str, Any]:
     if not resources:
         raise LookupError("The CKAN catalogue lists no Ist-Daten v2 files")
     return load_operating_day(resources[-1].operating_day)
+
+
+def _day_versions(operating_day: str) -> set[str]:
+    """Fingerprints of all loaded versions of one operating day."""
+    prefix = f"raw/{SOURCE}/dt={operating_day}/"
+    response = boto3.client("s3").list_objects_v2(Bucket=_bucket(), Prefix=prefix)
+    versions: set[str] = set()
+    for obj in response.get("Contents", []):
+        match = _MANIFEST_KEY.match(obj["Key"])
+        if match:
+            versions.add(match.group(2))
+    return versions
+
+
+def _archive_months(start: date, end: date) -> list[str]:
+    months: list[str] = []
+    year, month = start.year, start.month
+    while (year, month) <= (end.year, end.month):
+        months.append(f"{year:04d}-{month:02d}")
+        year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+    return months
+
+
+def plan_archive_import(
+    since: str, until: str, max_days: int | None = None
+) -> dict[str, Any]:
+    """
+    List the archive days in a date range that are not loaded yet
+
+    Only the ZIP central directories are read. Months whose archive is not
+    published (yet) are reported in ``missing_months``.
+
+    Args:
+        since: First operating day to import (YYYY-MM-DD)
+        until: Last operating day to import (YYYY-MM-DD)
+        max_days: Import at most this many days, oldest first
+
+    Returns:
+        dict[str, Any]: ``items`` (``operating_day`` and ``archive_month`` per
+        day to load, oldest first), ``available``, ``already_loaded`` and
+        ``missing_months``
+    """
+    start, end = date.fromisoformat(since), date.fromisoformat(until)
+    if start > end:
+        raise ValueError("since must not be after until")
+    if max_days is not None and max_days < 1:
+        raise ValueError("max_days must be >= 1")
+    loaded = loaded_versions()
+
+    items: list[dict[str, str]] = []
+    missing_months: list[str] = []
+    available = already_loaded = 0
+    for month in _archive_months(start, end):
+        try:
+            members = list_archive_members(month)
+        except ArchiveNotFound:
+            missing_months.append(month)
+            continue
+        for member in members:
+            if not since <= member.operating_day <= until:
+                continue
+            available += 1
+            if loaded.get(member.operating_day):
+                already_loaded += 1
+                continue
+            items.append(
+                {"operating_day": member.operating_day, "archive_month": month}
+            )
+    items.sort(key=lambda item: item["operating_day"])
+    if max_days is not None:
+        items = items[:max_days]
+    logger.info(
+        "Ist-Daten v2 archive plan %s..%s: %d to load, %d already loaded, "
+        "missing months %s",
+        since,
+        until,
+        len(items),
+        already_loaded,
+        missing_months,
+    )
+    return {
+        "source": SOURCE,
+        "since": since,
+        "until": until,
+        "items": items,
+        "available": available,
+        "already_loaded": already_loaded,
+        "missing_months": missing_months,
+    }
+
+
+def load_archive_day(
+    operating_day: str, archive_month: str | None = None
+) -> dict[str, Any]:
+    """
+    Stream one day from a monthly archive unchanged to S3 and write its manifest
+
+    The ZIP member is decompressed while streaming; ``zipfile`` verifies its
+    CRC32 at the end, so a corrupt member aborts the upload. Days that already
+    have any loaded version (from CKAN or an earlier import) are skipped.
+
+    Args:
+        operating_day: Operating day (YYYY-MM-DD)
+        archive_month: Archive month (YYYY-MM), defaults to the day's month
+
+    Returns:
+        dict[str, Any]: Status, run ID and S3 URI of the data file
+    """
+    date.fromisoformat(operating_day)
+    month = validate_month(archive_month or operating_day[:7])
+    existing = _day_versions(operating_day)
+    if existing:
+        logger.info(
+            "Ist-Daten v2 %s already loaded (versions %s), skipping archive",
+            operating_day,
+            sorted(existing),
+        )
+        return {
+            "status": "skipped",
+            "operating_day": operating_day,
+            "existing_versions": sorted(existing),
+        }
+
+    bucket = _bucket()
+    day_dt = _day_datetime(operating_day)
+    archive, members = open_archive(month)
+    try:
+        member = next(
+            (item for item in members if item.operating_day == operating_day), None
+        )
+        if member is None:
+            raise LookupError(f"Archive {month} contains no file for {operating_day}")
+        data_key = build_key(SOURCE, "csv", now=day_dt, run_id=member.run_id)
+        with archive.open(member.name) as source:
+            stream = _MeteredStream(cast(BinaryIO, source))
+            boto3.client("s3").upload_fileobj(
+                cast(Any, stream),
+                bucket,
+                data_key,
+                ExtraArgs={"ContentType": "text/csv"},
+            )
+    finally:
+        archive.close()
+
+    if stream.bytes_read != member.file_size:
+        raise RuntimeError(
+            f"Ist-Daten v2 archive {operating_day}: wrote {stream.bytes_read} "
+            f"bytes, ZIP lists {member.file_size}"
+        )
+    write_run_manifest(
+        SOURCE,
+        member.run_id,
+        {
+            "status": "completed",
+            "origin": "archive",
+            "operating_day": operating_day,
+            "data_key": data_key,
+            "bytes": stream.bytes_read,
+            "md5": stream.md5,
+            "header": stream.header,
+            "archive": {
+                "url": member.url,
+                "month": member.month,
+                "member": member.name,
+                "crc32": member.fingerprint,
+                "compressed_size": member.compressed_size,
+                "file_size": member.file_size,
+            },
+            "ingested_at": datetime.now(timezone.utc).isoformat(),
+        },
+        now=day_dt,
+    )
+    uri = f"s3://{bucket}/{data_key}"
+    logger.info(
+        "Loaded Ist-Daten v2 %s from archive %s: %d bytes -> %s",
+        operating_day,
+        month,
+        stream.bytes_read,
+        uri,
+    )
+    return {
+        "status": "completed",
+        "operating_day": operating_day,
+        "run_id": member.run_id,
+        "uri": uri,
+        "bytes": stream.bytes_read,
+    }
