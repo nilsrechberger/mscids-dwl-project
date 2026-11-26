@@ -247,7 +247,7 @@ def test_weather_batch_receives_observation_date() -> None:
         )
 
     assert result.next_batch is None
-    fetch.assert_called_once_with(0, 50, "2026-11-20")
+    fetch.assert_called_once_with(0, 50, "2026-11-20", None)
 
 
 def test_weather_batch_defaults_to_weather_batch_size() -> None:
@@ -261,7 +261,7 @@ def test_weather_batch_defaults_to_weather_batch_size() -> None:
     ):
         run_batch("municipality_weather")
 
-    fetch.assert_called_once_with(0, 25, None)
+    fetch.assert_called_once_with(0, 25, None, None)
 
 
 def test_run_batch_writes_manifests_for_run_id() -> None:

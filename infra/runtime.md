@@ -59,7 +59,7 @@ Files are stored as `raw/istdaten_v2/dt=<operating day>/run=istdaten-v2-<day>-<h
 
 ## Alarms and budget
 
-All alarms publish to the SNS topic `<project>-<environment>-alarms`. With `alarm_emails` set, Terraform subscribes every address (each recipient confirms the AWS e-mail once) and creates a monthly cost budget (`monthly_budget_usd`, notifications at 80 % actual and 100 % forecasted). Alarms: loader Lambda `Errors > 0`, and `ExecutionsFailed`, `ExecutionsTimedOut`, `ExecutionsAborted > 0` for both state machines.
+All alarms publish to the SNS topic `<project>-<environment>-alarms`. With `alarm_emails` set, Terraform subscribes every address (each recipient confirms the AWS e-mail once) and creates a monthly cost budget (`monthly_budget_usd`, notifications at 80 % actual and 100 % forecasted). Alarms: loader Lambda `Errors > 0`, and `ExecutionsFailed`, `ExecutionsTimedOut`, `ExecutionsAborted > 0` for every state machine.
 
 ## Ist-Daten v2 archive import
 
@@ -73,6 +73,21 @@ The `istdaten-archive` state machine imports days older than the CKAN window fro
 2. `LoadDays` loads each day with one Lambda invocation (`{"source": "istdaten_v2", "operating_day": "...", "archive_month": "YYYY-MM"}`), at most `istdaten_archive_max_concurrency` (default 3) in parallel. The Lambda streams the ZIP member with range requests, decompresses it on the fly and verifies its CRC32; a corrupt member fails before the manifest is written.
 
 Imported days use the same key layout as the CKAN sync with the CRC32 as version marker (`run=istdaten-v2-<day>-<crc32>`); their manifest has `origin: archive` and the ZIP URL and member. A day that already has any version (for example from CKAN) is skipped, so restarting the import is safe. The per-day results are not kept in the execution output (state size limit); the manifests in S3 are the record. Start with `max_days` in the test environment and check the result with Athena before importing the full range in prod.
+
+## Municipality weather backfill
+
+The `weather-backfill` state machine loads the municipality weather history from the Open-Meteo archive API. The free tier allows 10,000 calls per day, 5,000 per hour and 600 per minute, and Open-Meteo counts one location as one call per two weeks of data. The daily run already costs about one call per point (about 2,070). Loading the history day by day would cost one call per point and day; one calendar month per request costs about 2.2 calls per point instead. The backfill therefore loads one month per run and waits between the months. It is started manually and never scheduled:
+
+```json
+{"since": "2025-08-01", "until": "2026-11-21", "point_snapshot": "points-v1"}
+```
+
+Optional: `batch_size` (default 50) and `interval_hours` (default 24). `until` must be the day before the first daily weather run, so the two never overlap.
+
+1. `PlanMonths` (`action = plan_weather_backfill`) splits the range into calendar months, skips months whose final manifest is `completed` and gives every month after the first a `wait_seconds` of `interval_hours`.
+2. `LoadMonths` loads the months one after another: wait, then the same batch loop as the `loader` state machine with `end_date` in the event and a pause of `weather_backfill_batch_wait_seconds` (default 15) between batches, then `finalize`. A month whose final manifest is not `completed` fails the execution (`WeatherMonthIncomplete`). HTTP errors such as 429 are retried after 5, 10 and 20 minutes.
+
+A month with 2,071 points costs about 4,600 calls in about 15 minutes, so start the execution at a time of day well away from the daily schedule (06:00 UTC) and keep `interval_hours` at 24. Each month is stored as a normal `municipality_weather` run under `dt=<first day of the month>` with run ID `municipality-weather-<first>-<last>-<point_snapshot>`; the manifest has `end_date`, and the hourly timestamps in the responses identify the days. Restarting with the same input skips completed months.
 
 ## Daily EventBridge preparation
 

@@ -73,7 +73,10 @@ def fetch_batch(
         raise RuntimeError("MUNICIPALITY_WEATHER_API_ENDPOINT is not set")
     if not points:
         raise ValueError("Cannot fetch an empty municipality weather batch")
-    response = get_session().get(build_url(points, start_date, end_date), timeout=60)
+    # month-long backfill requests take longer than single days
+    response = get_session().get(
+        build_url(points, start_date, end_date), timeout=(10, 180)
+    )
     response.raise_for_status()
     payload: Any = response.json()
     responses = payload if isinstance(payload, list) else [payload]

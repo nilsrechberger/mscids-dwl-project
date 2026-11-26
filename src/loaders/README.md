@@ -49,7 +49,7 @@ Production sources for the municipality pipeline are currently:
 
 - `istdaten_v2`: primary daily transport source, synced from the CKAN catalogue and stored as unchanged CSV per operating day.
 - `municipality`: BFS municipality reference source.
-- `municipality_weather`: batched Open-Meteo archive responses for the versioned municipality point snapshot.
+- `municipality_weather`: batched Open-Meteo archive responses for the versioned municipality point snapshot. Daily runs fetch one day; backfill runs add `end_date` and fetch a whole month per request (see `src/weather_backfill.py` and [infra/runtime.md](../../infra/runtime.md)).
 
 The following loaders remain available for compatibility or baseline comparisons, but are not the primary municipality-analysis sources yet:
 

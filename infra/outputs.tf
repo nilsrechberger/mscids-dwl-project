@@ -67,3 +67,8 @@ output "athena_workgroup_name" {
   description = "Athena workgroup for data-lake queries (results under athena-results/)."
   value       = aws_athena_workgroup.main.name
 }
+
+output "weather_backfill_state_machine_arn" {
+  description = "ARN of the municipality weather backfill state machine, or null before the first image deployment."
+  value       = try(aws_sfn_state_machine.weather_backfill[0].arn, null)
+}
