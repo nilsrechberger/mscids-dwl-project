@@ -89,6 +89,15 @@ Optional: `batch_size` (default 50) and `interval_hours` (default 24). `until` m
 
 A month with 2,071 points costs about 4,600 calls in about 15 minutes, so start the execution at a time of day well away from the daily schedule (06:00 UTC) and keep `interval_hours` at 24. Each month is stored as a normal `municipality_weather` run under `dt=<first day of the month>` with run ID `municipality-weather-<first>-<last>-<point_snapshot>`; the manifest has `end_date`, and the hourly timestamps in the responses identify the days. Restarting with the same input skips completed months.
 
+## Silver Ist-Daten build
+
+The `silver-istdaten` state machine keeps the Iceberg table `mscids_dwl_<environment>_silver.istdaten` in line with the raw files (see [sql/README.md](../sql/README.md)):
+
+1. `PlanDays` (`action = plan_silver_istdaten`) lists the newest raw run per operating day (latest `manifest.json`) and the build markers under `silver/_state/istdaten/`, and returns the days that are missing or were built from an older run. It creates the table on first use.
+2. `BuildDays` rebuilds each day (`action = build_silver_istdaten`), at most `silver_max_concurrency` (default 3) in parallel: delete the old marker, `DELETE` the day, `INSERT` it from the raw file, count the rows, write the new marker. Failures (for example Iceberg commit conflicts) are retried; a rebuild is idempotent.
+
+A daily EventBridge rule (`silver_schedule_expression`, default 08:00 UTC, after the 06:00 sync) starts it with `{}`. Manual input: `{"since": "2025-08-01", "until": "2025-08-31", "max_days": 5}`; `{"force": true, ...}` rebuilds days that are up to date, for example after a change of the SQL. One day scans about 0.6 GB of CSV (about 0.003 USD); the first build of all days about 290 GB (about 1.50 USD).
+
 ## Daily EventBridge preparation
 
 The Terraform configuration contains two daily EventBridge rules: Ist-Daten-v2 starts the `istdaten-sync` state machine, municipality-weather starts the `loader` state machine. They are disabled by default with `eventbridge_schedule_enabled = false` and must remain disabled until the schedule has been reviewed in the test environment. The municipality register is a static reference snapshot and is loaded once per snapshot version or manually when the official reference changes; it is not part of the daily schedule.

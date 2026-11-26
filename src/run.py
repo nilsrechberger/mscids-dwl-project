@@ -26,6 +26,8 @@ from src.loaders.transport import fetch_all_locations_with_status
 from src.loaders.weather import fetch_weather
 from src.log import setup_logging
 from src.sources import ALL_SOURCES, require_source
+from src.silver.istdaten import build_day as build_silver_istdaten_day
+from src.silver.istdaten import plan_silver_istdaten
 from src.weather_backfill import plan_weather_backfill
 from src.istdaten_sync import (
     load_archive_day,
@@ -298,6 +300,11 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     Weather backfill: ``action=plan_weather_backfill`` (``input`` with
     ``since``, ``until``, ``point_snapshot``) splits the range into calendar
     months; batch events with ``end_date`` fetch a whole month per request.
+
+    Silver: ``action=plan_silver_istdaten`` (optional ``input`` with
+    ``since``, ``until``, ``max_days``, ``force``) lists the days whose Silver
+    data is missing or out of date; ``action=build_silver_istdaten`` with
+    ``operating_day`` rebuilds one day with Athena.
     """
     logging.getLogger().setLevel(logging.INFO)
     if event.get("action") == "plan_istdaten_sync":
@@ -322,6 +329,22 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             until,
             int(archive_max_days) if archive_max_days is not None else None,
         )
+    if event.get("action") == "plan_silver_istdaten":
+        silver_options = event.get("input") or {}
+        if not isinstance(silver_options, dict):
+            raise ValueError("plan_silver_istdaten 'input' must be an object")
+        silver_max_days = silver_options.get("max_days")
+        return plan_silver_istdaten(
+            since=silver_options.get("since"),
+            until=silver_options.get("until"),
+            max_days=int(silver_max_days) if silver_max_days is not None else None,
+            force=bool(silver_options.get("force", False)),
+        )
+    if event.get("action") == "build_silver_istdaten":
+        silver_day = event.get("operating_day")
+        if not isinstance(silver_day, str):
+            raise ValueError("build_silver_istdaten needs 'operating_day'")
+        return build_silver_istdaten_day(silver_day)
     if event.get("action") == "plan_weather_backfill":
         backfill_options = event.get("input") or {}
         if not isinstance(backfill_options, dict):

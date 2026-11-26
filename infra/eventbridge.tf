@@ -33,6 +33,7 @@ resource "aws_iam_role_policy" "eventbridge_step_functions" {
       Resource = [
         aws_sfn_state_machine.loader[0].arn,
         aws_sfn_state_machine.istdaten_sync[0].arn,
+        aws_sfn_state_machine.silver_istdaten[0].arn,
       ]
     }]
   })
@@ -77,4 +78,22 @@ resource "aws_cloudwatch_event_target" "daily_municipality_weather" {
     batch_size     = 50
     point_snapshot = "points-v1"
   })
+}
+
+resource "aws_cloudwatch_event_rule" "daily_silver_istdaten" {
+  count = var.eventbridge_schedule_enabled && var.lambda_image_uri != null ? 1 : 0
+
+  name                = "${local.eventbridge_schedule_name_prefix}-silver-istdaten"
+  description         = "Daily Silver Ist-Daten build (new and replaced days) after the CKAN sync."
+  schedule_expression = var.silver_schedule_expression
+  state               = "ENABLED"
+}
+
+resource "aws_cloudwatch_event_target" "daily_silver_istdaten" {
+  count = var.eventbridge_schedule_enabled && var.lambda_image_uri != null ? 1 : 0
+
+  rule     = aws_cloudwatch_event_rule.daily_silver_istdaten[0].name
+  arn      = aws_sfn_state_machine.silver_istdaten[0].arn
+  role_arn = aws_iam_role.eventbridge_step_functions[0].arn
+  input    = jsonencode({})
 }

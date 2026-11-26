@@ -8,7 +8,7 @@ Terraform for the AWS data lake and its runtime. Each environment (`test`, `prod
 - optional Terraform state bucket (`create_state_bucket`, normally bootstrapped separately);
 - least-privilege S3 policy for the loader;
 - ECR repository (immutable tags, scan on push), Lambda execution role and CloudWatch log group;
-- when `lambda_image_uri` is set: the Lambda container function and the Step Functions workflows `loader` (batched sources) `istdaten-sync` (Ist-Daten v2 CKAN sync) and `istdaten-archive` (one-off historical import from the monthly ZIP archives, started manually) and `weather-backfill` (one-off monthly weather history within the Open-Meteo limits, started manually);
+- when `lambda_image_uri` is set: the Lambda container function and the Step Functions workflows `loader` (batched sources) `istdaten-sync` (Ist-Daten v2 CKAN sync) and `istdaten-archive` (one-off historical import from the monthly ZIP archives, started manually) `weather-backfill` (one-off monthly weather history within the Open-Meteo limits, started manually) and `silver-istdaten` (daily Silver build with Athena into an Iceberg table);
 - daily EventBridge rules (`eventbridge_schedule_enabled`, disabled by default);
 - SNS alarm topic, CloudWatch alarms and a monthly budget (`alarm_emails`, `monthly_budget_usd`);
 - Glue Data Catalog database `<project>_<environment>_raw` with the raw Ist-Daten table (partition projection on `dt`) and the Athena workgroup `<project>-<environment>` (results under `athena-results/`, expiring after `athena_results_expiration_days`, scan limit `athena_bytes_scanned_cutoff`). Query patterns: [`../sql/README.md`](../sql/README.md).

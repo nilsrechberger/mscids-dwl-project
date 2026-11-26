@@ -133,6 +133,22 @@ variable "istdaten_archive_max_concurrency" {
   }
 }
 
+variable "silver_max_concurrency" {
+  description = "Maximum number of days the silver-istdaten state machine builds in parallel (Athena queries; Iceberg commits retry on conflicts)."
+  type        = number
+  default     = 3
+  validation {
+    condition     = var.silver_max_concurrency >= 1 && var.silver_max_concurrency <= 10
+    error_message = "silver_max_concurrency must be between 1 and 10."
+  }
+}
+
+variable "silver_schedule_expression" {
+  description = "UTC EventBridge schedule for the daily Silver build; after the Ist-Daten sync (eventbridge_schedule_expression)."
+  type        = string
+  default     = "cron(0 8 * * ? *)"
+}
+
 variable "weather_backfill_batch_wait_seconds" {
   description = "Pause between two weather backfill batches. A batch of 50 points over one month counts as about 110 Open-Meteo calls; the free tier allows 600 per minute."
   type        = number
