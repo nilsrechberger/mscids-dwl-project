@@ -40,6 +40,10 @@ class Config:
     )
     TRANSPORT_BATCH_SIZE = int(os.getenv("TRANSPORT_BATCH_SIZE", "300"))
     S3_BUCKET = os.getenv("S3_BUCKET")
+    # Silver build (Athena): workgroup and Glue databases
+    ATHENA_WORKGROUP = os.getenv("ATHENA_WORKGROUP")
+    GLUE_RAW_DATABASE = os.getenv("GLUE_RAW_DATABASE")
+    GLUE_SILVER_DATABASE = os.getenv("GLUE_SILVER_DATABASE")
     HTTP_MAX_RETRIES = int(os.getenv("HTTP_MAX_RETRIES", "3"))
     HTTP_BACKOFF_SECONDS = float(os.getenv("HTTP_BACKOFF_SECONDS", "1"))
 

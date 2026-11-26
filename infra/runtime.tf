@@ -52,7 +52,10 @@ locals {
   lambda_environment = merge(
     var.lambda_environment,
     {
-      S3_BUCKET = var.data_bucket_name
+      S3_BUCKET            = var.data_bucket_name
+      ATHENA_WORKGROUP     = aws_athena_workgroup.main.name
+      GLUE_RAW_DATABASE    = aws_glue_catalog_database.raw.name
+      GLUE_SILVER_DATABASE = aws_glue_catalog_database.silver.name
     },
     var.municipality_weather_points_uri == null ? {} : {
       MUNICIPALITY_WEATHER_POINTS = var.municipality_weather_points_uri

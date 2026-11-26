@@ -40,6 +40,7 @@ locals {
     istdaten-sync    = aws_sfn_state_machine.istdaten_sync[0].arn
     istdaten-archive = aws_sfn_state_machine.istdaten_archive[0].arn
     weather-backfill = aws_sfn_state_machine.weather_backfill[0].arn
+    silver-istdaten  = aws_sfn_state_machine.silver_istdaten[0].arn
   }
   state_machine_failure_metrics = ["ExecutionsFailed", "ExecutionsTimedOut", "ExecutionsAborted"]
   state_machine_alarms = {

@@ -72,3 +72,13 @@ output "weather_backfill_state_machine_arn" {
   description = "ARN of the municipality weather backfill state machine, or null before the first image deployment."
   value       = try(aws_sfn_state_machine.weather_backfill[0].arn, null)
 }
+
+output "glue_silver_database_name" {
+  description = "Glue database of the Silver layer (Iceberg tables built with Athena)."
+  value       = aws_glue_catalog_database.silver.name
+}
+
+output "silver_istdaten_state_machine_arn" {
+  description = "ARN of the Silver Ist-Daten build state machine, or null before the first image deployment."
+  value       = try(aws_sfn_state_machine.silver_istdaten[0].arn, null)
+}

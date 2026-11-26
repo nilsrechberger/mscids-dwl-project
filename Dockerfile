@@ -6,5 +6,6 @@ RUN python -m pip install --no-cache-dir -r requirements.txt --target "${LAMBDA_
 COPY src ${LAMBDA_TASK_ROOT}/src
 
 # Events: {"source": "istdaten_v2", "operating_day": "YYYY-MM-DD"},
-# {"action": "plan_istdaten_sync"}, municipality_weather batches (see infra/runtime.md)
+# {"action": "plan_istdaten_sync"}, municipality_weather batches, Silver builds
+# (see infra/runtime.md). The Silver SQL templates ship inside src/silver/sql.
 CMD ["src.run.handler"]
