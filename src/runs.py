@@ -27,6 +27,16 @@ def validate_run_context(event: dict[str, Any], source: str) -> None:
         date.fromisoformat(event["observation_date"])
     except (TypeError, ValueError) as error:
         raise ValueError("observation_date must use YYYY-MM-DD") from error
+    end_date = event.get("end_date")
+    if end_date is not None:
+        if source != "municipality_weather":
+            raise ValueError("end_date is only supported for municipality_weather")
+        try:
+            end = date.fromisoformat(end_date)
+        except (TypeError, ValueError) as error:
+            raise ValueError("end_date must use YYYY-MM-DD") from error
+        if end < date.fromisoformat(event["observation_date"]):
+            raise ValueError("end_date must not be before observation_date")
     if source == "municipality_weather":
         snapshot = event.get("point_snapshot")
         if not isinstance(snapshot, str) or not snapshot:

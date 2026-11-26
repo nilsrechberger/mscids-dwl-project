@@ -133,6 +133,16 @@ variable "istdaten_archive_max_concurrency" {
   }
 }
 
+variable "weather_backfill_batch_wait_seconds" {
+  description = "Pause between two weather backfill batches. A batch of 50 points over one month counts as about 110 Open-Meteo calls; the free tier allows 600 per minute."
+  type        = number
+  default     = 15
+  validation {
+    condition     = var.weather_backfill_batch_wait_seconds >= 0 && var.weather_backfill_batch_wait_seconds <= 600
+    error_message = "weather_backfill_batch_wait_seconds must be between 0 and 600."
+  }
+}
+
 variable "alarm_emails" {
   description = "E-mail addresses for pipeline alarms and budget notifications (at most 10). Leave empty to create the SNS topic without subscriptions and without a budget."
   type        = list(string)

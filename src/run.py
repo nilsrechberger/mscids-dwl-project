@@ -26,6 +26,7 @@ from src.loaders.transport import fetch_all_locations_with_status
 from src.loaders.weather import fetch_weather
 from src.log import setup_logging
 from src.sources import ALL_SOURCES, require_source
+from src.weather_backfill import plan_weather_backfill
 from src.istdaten_sync import (
     load_archive_day,
     load_latest,
@@ -75,13 +76,16 @@ def _municipality_names() -> list[str]:
 
 
 def _fetch_transport_batch(
-    batch: int, batch_size: int, observation_date: str | None = None
+    batch: int,
+    batch_size: int,
+    observation_date: str | None = None,
+    end_date: str | None = None,
 ) -> tuple[dict, int, tuple[str, ...]]:
     """
     Fetch one slice of the municipality list
 
-    The legacy transport API has no historical mode, so observation_date is
-    accepted for a uniform signature and ignored.
+    The legacy transport API has no historical mode, so observation_date and
+    end_date are accepted for a uniform signature and ignored.
     """
     names = _municipality_names()
     total = -(-len(names) // batch_size)
@@ -91,12 +95,20 @@ def _fetch_transport_batch(
 
 
 def _fetch_municipality_weather_batch(
-    batch: int, batch_size: int, observation_date: str | None = None
+    batch: int,
+    batch_size: int,
+    observation_date: str | None = None,
+    end_date: str | None = None,
 ) -> tuple[dict, int, tuple[str, ...]]:
-    """Fetch one raw Open-Meteo batch for the configured point snapshot."""
+    """
+    Fetch one raw Open-Meteo batch for the configured point snapshot
+
+    observation_date is the first day; end_date (backfill runs) extends the
+    request to a date range, otherwise a single day is fetched.
+    """
     points = load_weather_points(config.MUNICIPALITY_WEATHER_POINTS or "")
     start_date = observation_date or config.MUNICIPALITY_WEATHER_START_DATE
-    end_date = observation_date or config.MUNICIPALITY_WEATHER_END_DATE
+    end_date = end_date or observation_date or config.MUNICIPALITY_WEATHER_END_DATE
     if not start_date or not end_date:
         raise RuntimeError("MUNICIPALITY_WEATHER_START_DATE and _END_DATE must be set")
     total = -(-len(points) // batch_size)
@@ -120,7 +132,9 @@ LOADERS: dict[str, Callable[[], tuple[bytes, str]]] = {
 # sources loaded in several invocations:
 # name -> function(batch, batch_size, observation_date) returning
 # (payload, total batches, failed items)
-BatchFetcher = Callable[[int, int, str | None], tuple[dict, int, tuple[str, ...]]]
+BatchFetcher = Callable[
+    [int, int, str | None, str | None], tuple[dict, int, tuple[str, ...]]
+]
 BATCHED_LOADERS: dict[str, BatchFetcher] = {
     "transport": _fetch_transport_batch,
     "municipality_weather": _fetch_municipality_weather_batch,
@@ -140,6 +154,7 @@ def run_batch(
     batch_size: int | None = None,
     run_id: str | None = None,
     observation_date: str | None = None,
+    end_date: str | None = None,
 ) -> BatchResult:
     """
     Fetch one batch of a batched source and write it to S3
@@ -150,6 +165,8 @@ def run_batch(
         batch_size: Items per batch, defaults to default_batch_size(source)
         run_id: Deterministic run ID; enables batch and final manifests
         observation_date: Day to load (YYYY-MM-DD), also used for dt=
+        end_date: Last day of a date-range run (weather backfill); the run is
+            still stored under dt=<observation_date>
 
     Returns:
         BatchResult: S3 URI and the next batch number (None after the last)
@@ -160,7 +177,9 @@ def run_batch(
     if batch < 0 or size < 1:
         raise ValueError("batch must be >= 0 and batch_size >= 1")
 
-    data, total, failed = BATCHED_LOADERS[source](batch, size, observation_date)
+    data, total, failed = BATCHED_LOADERS[source](
+        batch, size, observation_date, end_date
+    )
     if batch >= total:
         raise ValueError(f"Batch {batch} out of range, {source} has {total} batches")
     payload = _json_bytes(data)
@@ -196,6 +215,8 @@ def run_batch(
             "items_in_batch": len(items) if isinstance(items, list) else len(data),
             "status": "partial" if failed else "completed",
         }
+        if end_date is not None:
+            metadata["end_date"] = end_date
         write_run_manifest(source, run_id, metadata, now=run_datetime, part=batch)
         if batch + 1 == total:
             write_run_manifest(
@@ -273,6 +294,10 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     optional ``max_days``) lists archive days that are not loaded yet; adding
     ``"archive_month": "YYYY-MM"`` to the load event reads the day from the
     monthly ZIP archive instead of CKAN.
+
+    Weather backfill: ``action=plan_weather_backfill`` (``input`` with
+    ``since``, ``until``, ``point_snapshot``) splits the range into calendar
+    months; batch events with ``end_date`` fetch a whole month per request.
     """
     logging.getLogger().setLevel(logging.INFO)
     if event.get("action") == "plan_istdaten_sync":
@@ -297,6 +322,14 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             until,
             int(archive_max_days) if archive_max_days is not None else None,
         )
+    if event.get("action") == "plan_weather_backfill":
+        backfill_options = event.get("input") or {}
+        if not isinstance(backfill_options, dict):
+            raise ValueError("plan_weather_backfill 'input' must be an object")
+        execution_id = event.get("execution_id")
+        if not isinstance(execution_id, str) or not execution_id:
+            raise ValueError("plan_weather_backfill requires execution_id")
+        return plan_weather_backfill(backfill_options, execution_id)
     if event.get("action") == "prepare_daily":
         source = event.get("source")
         point_snapshot = event.get("point_snapshot")
@@ -363,7 +396,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             finalize_observation_date,
             metadata={
                 key: event[key]
-                for key in ("execution_id", "point_snapshot")
+                for key in ("execution_id", "point_snapshot", "end_date")
                 if event.get(key) is not None
             },
         )
@@ -387,6 +420,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             return load_archive_day(operating_day, archive_month)
         return load_operating_day(operating_day)
     validate_run_context(event, source)
+    end_date = event.get("end_date")
     if source in BATCHED_LOADERS:
         if event.get("run_id") is None:
             result = run_batch(
@@ -399,6 +433,7 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 event.get("batch_size"),
                 event["run_id"],
                 event.get("observation_date"),
+                end_date,
             )
         return {
             "uri": result.uri,
