@@ -28,6 +28,16 @@ SOURCE_CONTRACTS: dict[str, SourceContract] = {
             "older days imported from the monthly ZIP archives"
         ),
     ),
+    "service_points": SourceContract(
+        name="service_points",
+        kind="stream",
+        extension="csv",
+        production=True,
+        description=(
+            "atlas service points (full export): stops with SLOID, BPUIC, "
+            "coordinates and BFS municipality number per validity period"
+        ),
+    ),
     "municipality": SourceContract(
         name="municipality",
         kind="xlsx",

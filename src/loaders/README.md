@@ -41,6 +41,14 @@ Downloads the static municipality XLSX file from the BFS (`MUNICIPALITY_XLSX`). 
 
 Fetches hourly `temperature_2m` and `rain` from the Open-Meteo archive API (`WEATHER_API_ENDPOINT`) for all 26 cantons in one request. The static `CANTONS` dict holds the coordinates of each cantonal capital. The result is `{canton code: response}`. The default range is 2026-09-14 to 2026-09-28.
 
+## Service points
+
+[service_points.py](service_points.py) — `download_service_points(target) -> dict`
+
+Streams the atlas full export (`SERVICE_POINTS_URL`, about 65 MB, public permalink on `data.opentransportdata.swiss`) into a file object and returns URL, final URL, bytes, MD5 and the header line. Redirects to other hosts are rejected.
+
+[../service_points_sync.py](../service_points_sync.py) skips the load if the MD5 equals the newest manifest; otherwise it stores the file unchanged as `raw/service_points/dt=<UTC date>/run=service-points-<date>-<md5[:12]>/data.csv` with a `manifest.json` and rewrites the Silver reference `silver/service_points/service_points.tsv` (typed English columns, BFS number, `is_latest_version`, `REVOKED` dropped). A weekly EventBridge rule runs it with `{"source": "service_points"}`; `{"force": true}` reloads unchanged content.
+
 ## Source contract status
 
 The canonical source registry is defined in `src/sources.py` and is used by `src.run` to validate local and Lambda invocations.
@@ -49,6 +57,7 @@ Production sources for the municipality pipeline are currently:
 
 - `istdaten_v2`: primary daily transport source, synced from the CKAN catalogue and stored as unchanged CSV per operating day.
 - `municipality`: BFS municipality reference source.
+- `service_points`: atlas service points (full export of `service-point-v2`), the stop -> municipality reference. See below.
 - `municipality_weather`: batched Open-Meteo archive responses for the versioned municipality point snapshot. Daily runs fetch one day; backfill runs add `end_date` and fetch a whole month per request (see `src/weather_backfill.py` and [infra/runtime.md](../../infra/runtime.md)).
 
 The following loaders remain available for compatibility or baseline comparisons, but are not the primary municipality-analysis sources yet:

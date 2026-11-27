@@ -184,3 +184,95 @@ resource "aws_sfn_state_machine" "silver_istdaten" {
     Component = "orchestration"
   }
 }
+
+# Stop reference: atlas service points normalized by the Lambda
+# (src/service_points_sync.py) into one TSV that is replaced as a whole.
+# One row per version of each service point with the BFS municipality number;
+# join Ist-Daten on stop_id_bpuic = number and the operating date between
+# valid_from and valid_to (see sql/silver/stop_municipality.sql).
+resource "aws_glue_catalog_table" "service_points" {
+  database_name = aws_glue_catalog_database.silver.name
+  name          = "service_points"
+  description   = "atlas service points (all versions) with BFS municipality number; rebuilt by the service_points load."
+  table_type    = "EXTERNAL_TABLE"
+
+  parameters = {
+    "classification"         = "csv"
+    "skip.header.line.count" = "1"
+  }
+
+  storage_descriptor {
+    location      = "s3://${aws_s3_bucket.data_lake.bucket}/silver/service_points/"
+    input_format  = "org.apache.hadoop.mapred.TextInputFormat"
+    output_format = "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
+
+    ser_de_info {
+      name                  = "service-points-tsv"
+      serialization_library = "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"
+      parameters = {
+        "field.delim"               = "\t"
+        "serialization.format"      = "\t"
+        "serialization.null.format" = ""
+      }
+    }
+
+    dynamic "columns" {
+      for_each = local.service_point_columns
+      content {
+        name = columns.value.name
+        type = columns.value.type
+      }
+    }
+  }
+}
+
+locals {
+  service_point_columns = [
+    { name = "sloid", type = "string" },
+    { name = "number", type = "string" },
+    { name = "designation_official", type = "string" },
+    { name = "valid_from", type = "date" },
+    { name = "valid_to", type = "date" },
+    { name = "status", type = "string" },
+    { name = "is_stop_point", type = "boolean" },
+    { name = "means_of_transport", type = "string" },
+    { name = "municipality_gdenr", type = "int" },
+    { name = "municipality_name", type = "string" },
+    { name = "canton_abbreviation", type = "string" },
+    { name = "locality_name", type = "string" },
+    { name = "wgs84_east", type = "double" },
+    { name = "wgs84_north", type = "double" },
+    { name = "is_latest_version", type = "boolean" },
+    { name = "source_run_id", type = "string" },
+  ]
+}
+
+# Weekly refresh of the stop reference (the export changes daily, but stops
+# change rarely; a changed file is stored and Silver rebuilt, an unchanged one
+# is skipped). Failures raise the loader Lambda error alarm.
+resource "aws_cloudwatch_event_rule" "service_points" {
+  count = var.eventbridge_schedule_enabled && var.lambda_image_uri != null ? 1 : 0
+
+  name                = "${var.project_name}-${var.environment}-weekly-service-points"
+  description         = "Weekly atlas service point load (stop to municipality reference)."
+  schedule_expression = var.service_points_schedule_expression
+  state               = "ENABLED"
+}
+
+resource "aws_cloudwatch_event_target" "service_points" {
+  count = var.eventbridge_schedule_enabled && var.lambda_image_uri != null ? 1 : 0
+
+  rule  = aws_cloudwatch_event_rule.service_points[0].name
+  arn   = aws_lambda_function.loader[0].arn
+  input = jsonencode({ source = "service_points" })
+}
+
+resource "aws_lambda_permission" "service_points_schedule" {
+  count = var.eventbridge_schedule_enabled && var.lambda_image_uri != null ? 1 : 0
+
+  statement_id  = "AllowWeeklyServicePoints"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.loader[0].function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.service_points[0].arn
+}

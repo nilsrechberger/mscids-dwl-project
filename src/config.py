@@ -28,6 +28,12 @@ class Config:
     ISTDATEN_ARCHIVE_BASE_URL = os.getenv(
         "ISTDATEN_ARCHIVE_BASE_URL", "https://archive.opentransportdata.swiss/istdaten"
     )
+    # atlas service points (stops with BFS municipality), full export
+    SERVICE_POINTS_URL = os.getenv(
+        "SERVICE_POINTS_URL",
+        "https://data.opentransportdata.swiss/en/dataset/service-point-v2/"
+        "resource_permalink/full-swiss-service-point.csv",
+    )
     MUNICIPALITY_WEATHER_API_ENDPOINT = os.getenv(
         "MUNICIPALITY_WEATHER_API_ENDPOINT",
         "https://archive-api.open-meteo.com/v1/archive",

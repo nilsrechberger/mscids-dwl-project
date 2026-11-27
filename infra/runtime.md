@@ -98,6 +98,10 @@ The `silver-istdaten` state machine keeps the Iceberg table `mscids_dwl_<environ
 
 A daily EventBridge rule (`silver_schedule_expression`, default 08:00 UTC, after the 06:00 sync) starts it with `{}`. Manual input: `{"since": "2025-08-01", "until": "2025-08-31", "max_days": 5}`; `{"force": true, ...}` rebuilds days that are up to date, for example after a change of the SQL. One day scans about 0.6 GB of CSV (about 0.003 USD); the first build of all days about 290 GB (about 1.50 USD).
 
+## Stop reference (service points)
+
+A weekly EventBridge rule (`service_points_schedule_expression`, default Monday 05:00 UTC) invokes the Lambda with `{"source": "service_points"}`. It downloads the atlas full export (about 65 MB, public, no key) and, if the MD5 changed, stores it under `raw/service_points/` and rewrites `silver/service_points/service_points.tsv`, which the Glue table `mscids_dwl_<environment>_silver.service_points` reads. Unchanged content returns `{"status": "unchanged"}`. Manual run: `aws lambda invoke` with `{"source": "service_points"}` (add `"force": true` to reload). Mapping queries: [sql/silver/stop_municipality.sql](../sql/silver/stop_municipality.sql).
+
 ## Daily EventBridge preparation
 
 The Terraform configuration contains two daily EventBridge rules: Ist-Daten-v2 starts the `istdaten-sync` state machine, municipality-weather starts the `loader` state machine. They are disabled by default with `eventbridge_schedule_enabled = false` and must remain disabled until the schedule has been reviewed in the test environment. The municipality register is a static reference snapshot and is loaded once per snapshot version or manually when the official reference changes; it is not part of the daily schedule.

@@ -28,6 +28,7 @@ from src.log import setup_logging
 from src.sources import ALL_SOURCES, require_source
 from src.silver.istdaten import build_day as build_silver_istdaten_day
 from src.silver.istdaten import plan_silver_istdaten
+from src.service_points_sync import load_service_points
 from src.weather_backfill import plan_weather_backfill
 from src.istdaten_sync import (
     load_archive_day,
@@ -261,6 +262,8 @@ def run(
                 observation_date=observation_date,
             )
         return result.uri
+    if source == "service_points":
+        return str(load_service_points().get("run_id"))
     if source == "istdaten_v2":
         # newest published day; history is loaded via the sync state machine
         return str(load_latest()["uri"])
@@ -429,6 +432,8 @@ def handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             f"Event must contain a string 'source'; choose from {ALL_SOURCES}"
         )
     require_source(source)
+    if source == "service_points":
+        return load_service_points(force=bool(event.get("force", False)))
     if source == "istdaten_v2":
         operating_day = event.get("operating_day")
         if operating_day is None:
