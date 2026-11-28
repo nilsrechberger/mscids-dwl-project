@@ -13,6 +13,7 @@ data "aws_iam_policy_document" "loader_s3" {
         "raw/istdaten_v2/*",
         "raw/municipality/*",
         "raw/municipality_weather/*",
+        "raw/service_points/*",
         "reference/*",
       ]
     }
@@ -28,6 +29,7 @@ data "aws_iam_policy_document" "loader_s3" {
       "${aws_s3_bucket.data_lake.arn}/reference/*",
       "${aws_s3_bucket.data_lake.arn}/raw/municipality/*",
       "${aws_s3_bucket.data_lake.arn}/raw/municipality_weather/*",
+      "${aws_s3_bucket.data_lake.arn}/raw/service_points/*",
     ]
   }
 

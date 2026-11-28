@@ -149,6 +149,12 @@ variable "silver_schedule_expression" {
   default     = "cron(0 8 * * ? *)"
 }
 
+variable "service_points_schedule_expression" {
+  description = "UTC EventBridge schedule for the atlas service point load (stop to municipality reference)."
+  type        = string
+  default     = "cron(0 5 ? * MON *)"
+}
+
 variable "weather_backfill_batch_wait_seconds" {
   description = "Pause between two weather backfill batches. A batch of 50 points over one month counts as about 110 Open-Meteo calls; the free tier allows 600 per minute."
   type        = number
