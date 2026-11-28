@@ -113,6 +113,32 @@ def test_download_streams_and_hashes() -> None:
             download_service_points(io.BytesIO())
 
 
+def test_download_accepts_signed_storage_redirect() -> None:
+    body = CSV.encode("utf-8")
+    signed = (
+        "https://abc.eu.r2.cloudflarestorage.com/dx-omd-prod/resources/r/"
+        "full-swiss-service-point.csv?X-Amz-Signature=secret&X-Amz-Expires=60"
+    )
+    with patch(
+        "src.loaders.service_points.get_session",
+        return_value=session_for(body, signed),
+    ):
+        result = download_service_points(io.BytesIO())
+
+    assert result["final_url"] == signed.split("?")[0]
+    assert "secret" not in json.dumps(result)
+    for bad in (
+        "http://abc.eu.r2.cloudflarestorage.com/x.csv",
+        "https://r2.cloudflarestorage.com.evil.example/x.csv",
+    ):
+        with patch(
+            "src.loaders.service_points.get_session",
+            return_value=session_for(body, bad),
+        ):
+            with pytest.raises(ValueError, match="redirected"):
+                download_service_points(io.BytesIO())
+
+
 def s3_client(previous_md5: str | None) -> MagicMock:
     client = MagicMock()
     contents = (

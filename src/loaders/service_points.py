@@ -20,7 +20,23 @@ logger = logging.getLogger(__name__)
 
 USER_AGENT = "mscids-dwl-project/1.0"
 ALLOWED_HOSTS = frozenset({"data.opentransportdata.swiss"})
+# The permalink redirects to a short-lived signed URL on the platform's file
+# storage (Cloudflare R2), e.g. <account>.eu.r2.cloudflarestorage.com.
+ALLOWED_DOWNLOAD_SUFFIXES = (".r2.cloudflarestorage.com",)
 CHUNK_SIZE = 1 << 20
+
+
+def _without_query(url: str) -> str:
+    """URL without query string (drops the signature of signed URLs)."""
+    return urlparse(url)._replace(query="", fragment="").geturl()
+
+
+def _allowed_download(url: str) -> bool:
+    parsed = urlparse(url)
+    host = parsed.hostname or ""
+    if parsed.scheme != "https":
+        return False
+    return host in ALLOWED_HOSTS or host.endswith(ALLOWED_DOWNLOAD_SUFFIXES)
 
 
 def download_service_points(target: BinaryIO) -> dict[str, Any]:
@@ -44,8 +60,8 @@ def download_service_points(target: BinaryIO) -> dict[str, Any]:
         url, headers={"User-Agent": USER_AGENT}, stream=True, timeout=(10, 300)
     ) as response:
         response.raise_for_status()
-        final_url = response.url
-        if urlparse(final_url).hostname not in ALLOWED_HOSTS:
+        final_url = _without_query(response.url)
+        if not _allowed_download(response.url):
             raise ValueError(f"Service point download redirected to {final_url}")
         for chunk in response.iter_content(CHUNK_SIZE):
             target.write(chunk)
