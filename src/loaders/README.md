@@ -45,7 +45,7 @@ Fetches hourly `temperature_2m` and `rain` from the Open-Meteo archive API (`WEA
 
 [service_points.py](service_points.py) — `download_service_points(target) -> dict`
 
-Streams the atlas full export (`SERVICE_POINTS_URL`, about 65 MB, public permalink on `data.opentransportdata.swiss`) into a file object and returns URL, final URL, bytes, MD5 and the header line. Redirects to other hosts are rejected.
+Streams the atlas full export (`SERVICE_POINTS_URL`, about 65 MB, public permalink on `data.opentransportdata.swiss`) into a file object and returns URL, final URL, bytes, MD5 and the header line. The permalink redirects to a short-lived signed URL on the platform's file storage (`*.r2.cloudflarestorage.com`); redirects to other hosts or to plain HTTP are rejected, and the manifest stores the final URL without its signature.
 
 [../service_points_sync.py](../service_points_sync.py) skips the load if the MD5 equals the newest manifest; otherwise it stores the file unchanged as `raw/service_points/dt=<UTC date>/run=service-points-<date>-<md5[:12]>/data.csv` with a `manifest.json` and rewrites the Silver reference `silver/service_points/service_points.tsv` (typed English columns, BFS number, `is_latest_version`, `REVOKED` dropped). A weekly EventBridge rule runs it with `{"source": "service_points"}`; `{"force": true}` reloads unchanged content.
 
